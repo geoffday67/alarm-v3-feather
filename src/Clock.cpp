@@ -65,6 +65,17 @@ int64_t ntpToUs(const uint8_t* p) {
   return (int64_t)(secs * 1000000ULL + ((frac * 1000000ULL) >> 32));
 }
 
+// Days from 1970-01-01 to the given proleptic Gregorian date (Howard
+// Hinnant's days_from_civil). Used instead of timegm(), which isn't standard C.
+int64_t daysFromCivil(int y, unsigned m, unsigned d) {
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = (unsigned)(y - era * 400);                        // 0-399
+  const unsigned doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;  // 0-365
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;            // 0-146096
+  return (int64_t)era * 146097 + (int64_t)doe - 719468;
+}
+
 // One request/reply. On success returns the server's time (us since 1900)
 // at the local esp_timer instant localUs, corrected for half the network
 // round trip, and the round trip itself.
@@ -144,8 +155,8 @@ void clockTask(void* pparams) {
 
     // Read the time fresh from the RTC on every tick (nothing is carried
     // over between wakes).
-    uint8_t year, month, day, weekday, hour, minute, second;
-    if (!pcf8563ReadDateTime(year, month, day, weekday, hour, minute, second)) {
+    time_t utc;
+    if (!Clock::readUtc(utc)) {
       Serial.println("RTC time not valid (VL set)");
     }
 
@@ -164,7 +175,7 @@ void clockTask(void* pparams) {
     // its own sleep inhibit, so this would be safe even outside the one
     // taken in clockHandler(). A tick arriving meanwhile is handled on the
     // next loop.
-    Display::showTime(hour, minute, second);
+    Display::showTime(utc);
 
     // Done. Released after re-enabling: if INT is still (or again) low the
     // ISR fires and re-inhibits. Even if the sleeping task got in first,
@@ -189,6 +200,14 @@ void IRAM_ATTR clockHandler() {
 }
 
 }  // namespace
+
+bool Clock::readUtc(time_t& utc) {
+  uint8_t year, month, day, weekday, hour, minute, second;
+  bool valid = pcf8563ReadDateTime(year, month, day, weekday, hour, minute, second);
+  int64_t days = daysFromCivil(2000 + year, month, day);  // RTC year is 0-99 from 2000
+  utc = (time_t)(days * 86400 + hour * 3600 + minute * 60 + second);
+  return valid;
+}
 
 void Clock::init() {
   bit = Utils::getNextEventBit();

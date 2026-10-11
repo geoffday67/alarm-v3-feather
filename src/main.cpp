@@ -183,24 +183,28 @@ uint8_t getHourSetting() {
 }
 
 void powerOnInit() {
-    uint8_t year, month, day, weekday, hour, minute, second;
-
     // Connect WiFi and get the time via NTP.
     if (Wireless::connectWiFi()) {
       Clock::syncNetworkTime();
     }
     Wireless::disconnectWiFi();
 
-    if (!pcf8563ReadDateTime(year, month, day, weekday, hour, minute, second)) {
+    time_t utc;
+    if (!Clock::readUtc(utc)) {
       Serial.println("RTC time not valid (VL set)");
     }
-    Display::showTime(hour, minute, second, /*full*/ true);
+    Display::showTime(utc, /*full*/ true);
 
 }
 
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting");
+
+  // Local time zone for display. The RTC and all internal times are UTC.
+  // TZ lives in RAM, so it's set on every boot including deep-sleep wakes.
+  setenv("TZ", TIMEZONE_POSIX, 1);
+  tzset();
 
   Utils::init();
   Serial.println("Utils initialised");

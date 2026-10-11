@@ -182,9 +182,12 @@ void Display::prepareForSleep() {
   }
 }
 
-void Display::showTime(uint8_t hour, uint8_t minute, uint8_t second, bool full) {
+void Display::showTime(time_t utc, bool full) {
+  struct tm local;
+  localtime_r(&utc, &local);
+
   char text[16];
-  snprintf(text, sizeof(text), "%02u:%02u:%02u", hour, minute, second);
+  snprintf(text, sizeof(text), "%02d:%02d:%02d", local.tm_hour, local.tm_min, local.tm_sec);
 
   Sleep::inhibit();
 
@@ -203,7 +206,7 @@ void Display::showTime(uint8_t hour, uint8_t minute, uint8_t second, bool full) 
   }
 
   EPD_DeepSleep();
-  Serial.printf("Display: %s\n", text);
+  Serial.printf("Display: %s %s\n", text, local.tm_isdst > 0 ? "(DST)" : "");
 
   Sleep::release();
 }

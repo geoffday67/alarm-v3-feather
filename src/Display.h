@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <time.h>
 
 // GDEY029T94-FL03 (SSD1680) e-paper panel showing the time.
 //
@@ -21,7 +22,8 @@ void init();
 // Call just before esp_deep_sleep_start(), with no update in progress.
 void prepareForSleep();
 
-// Renders "HH:MM:SS" and refreshes the panel, then puts the panel into its
+// Converts utc to local time (using the TZ set in setup()), renders it as
+// "HH:MM:SS" and refreshes the panel, then puts the panel into its
 // own deep sleep. Holds a Sleep inhibit for the duration, so the chip can't
 // go into deep sleep mid-update.
 //
@@ -31,6 +33,6 @@ void prepareForSleep();
 //
 // full = false: fast partial refresh. Blocks the caller until the panel
 // finishes, but polls BUSY with vTaskDelay(), so other tasks keep running.
-void showTime(uint8_t hour, uint8_t minute, uint8_t second, bool full = false);
+void showTime(time_t utc, bool full = false);
 
 }  // namespace Display

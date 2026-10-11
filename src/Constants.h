@@ -45,3 +45,9 @@
 // Set to 1 if the image needs reflecting about a horizontal axis (top/bottom
 // flip) to appear correctly on the panel, 0 otherwise.
 #define EPD_FLIP_H 1
+
+// Local time zone as a POSIX TZ string (applied with setenv/tzset). Europe/London:
+// GMT (UTC+0) in winter, BST (UTC+1) from the last Sunday in March at 01:00 GMT
+// to the last Sunday in October at 02:00 BST. Hard-coded until there's a
+// configuration UI.
+#define TIMEZONE_POSIX "GMT0BST,M3.5.0/1,M10.5.0"
