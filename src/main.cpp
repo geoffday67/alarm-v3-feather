@@ -186,9 +186,9 @@ void powerOnInit() {
     uint8_t year, month, day, weekday, hour, minute, second;
 
     // Connect WiFi and get the time via NTP.
-    Wireless::connectWiFi();
-    // Clock::getNetworkTime()
-    delay(500);
+    if (Wireless::connectWiFi()) {
+      Clock::syncNetworkTime();
+    }
     Wireless::disconnectWiFi();
 
     if (!pcf8563ReadDateTime(year, month, day, weekday, hour, minute, second)) {
