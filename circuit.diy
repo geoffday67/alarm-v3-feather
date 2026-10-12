@@ -1953,6 +1953,54 @@
       <arrowStart>true</arrowStart>
       <arrowEnd>true</arrowEnd>
     </diylc.connectivity.Line>
+    <diylc.connectivity.Line>
+      <id>a2fc0a68-82ce-4f7c-b199-88fdd1e24a61</id>
+      <name>LN6</name>
+      <alphaPercent>
+        <value>100</value>
+      </alphaPercent>
+      <points>
+        <point x="0.82" y="1.27"/>
+        <point x="0.865" y="1.5"/>
+        <point x="0.0" y="0.0"/>
+      </points>
+      <bodyColor hex="ffffff"/>
+      <borderColor hex="000000"/>
+      <labelColor hex="000000"/>
+      <leadColor hex="cccccc"/>
+      <display>NAME</display>
+      <flipStanding>false</flipStanding>
+      <labelOriantation>Directional</labelOriantation>
+      <moveLabel>false</moveLabel>
+      <hideShortLeads>false</hideShortLeads>
+      <color hex="000000"/>
+      <style>SOLID</style>
+      <thickness value="2.0" unit="px"/>
+      <arrowSize value="8.0" unit="px"/>
+      <arrow>
+        <npoints>3</npoints>
+        <xpoints>
+          <int>0</int>
+          <int>-8</int>
+          <int>8</int>
+          <int>0</int>
+        </xpoints>
+        <ypoints>
+          <int>0</int>
+          <int>-16</int>
+          <int>-16</int>
+          <int>0</int>
+        </ypoints>
+        <bounds>
+          <x>-8</x>
+          <y>-16</y>
+          <width>16</width>
+          <height>16</height>
+        </bounds>
+      </arrow>
+      <arrowStart>true</arrowStart>
+      <arrowEnd>false</arrowEnd>
+    </diylc.connectivity.Line>
     <diylc.misc.Label>
       <id>8137e85d-a96d-4519-a846-5dd9bf6f238b</id>
       <name>LAB21</name>
@@ -1985,6 +2033,17 @@
       <horizontalAlignment>CENTER</horizontalAlignment>
       <verticalAlignment>CENTER</verticalAlignment>
       <orientation>_90</orientation>
+    </diylc.misc.Label>
+    <diylc.misc.Label>
+      <id>fa4a67b1-78d5-4922-9f3b-1c063b9cfa8d</id>
+      <name>LAB22</name>
+      <point x="1.0" y="1.6"/>
+      <text>Button</text>
+      <font name="Dialog" size="14" style="0"/>
+      <color hex="000000"/>
+      <horizontalAlignment>CENTER</horizontalAlignment>
+      <verticalAlignment>CENTER</verticalAlignment>
+      <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
   </components>
   <groups/>
