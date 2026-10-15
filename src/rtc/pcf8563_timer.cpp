@@ -1,15 +1,9 @@
 #include "pcf8563_timer.h"
-#include "esp_attr.h"
 
-// Timer countdown periods selected by pcf8563Init()'s debug flag
-static const uint8_t PERIOD_NORMAL_S = 60;
-static const uint8_t PERIOD_DEBUG_S  = 3;
-
-// Period last written to the timer. Kept in LP RAM so it survives deep
-// sleep; zeroed by power-on, reflash, or reset, forcing a reconfigure.
-static RTC_DATA_ATTR uint8_t configuredPeriod = 0;
+#include "../I2CBus.h"
 
 void pcf8563WriteReg(uint8_t reg, uint8_t value) {
+  I2CBus::Guard bus;
   Wire.beginTransmission(PCF8563_ADDR);
   Wire.write(reg);
   Wire.write(value);
@@ -17,6 +11,7 @@ void pcf8563WriteReg(uint8_t reg, uint8_t value) {
 }
 
 uint8_t pcf8563ReadReg(uint8_t reg) {
+  I2CBus::Guard bus;
   Wire.beginTransmission(PCF8563_ADDR);
   Wire.write(reg);
   Wire.endTransmission(false);  // repeated start, no stop condition
@@ -25,10 +20,14 @@ uint8_t pcf8563ReadReg(uint8_t reg) {
 }
 
 bool pcf8563IsPresent() {
-  // 1. Address ACK
-  Wire.beginTransmission(PCF8563_ADDR);
-  if (Wire.endTransmission() != 0) {
-    return false;
+  // 1. Address ACK. Guard scoped to this probe only: pcf8563WriteReg() and
+  //    pcf8563ReadReg() below take their own, and I2CBus isn't recursive.
+  {
+    I2CBus::Guard bus;
+    Wire.beginTransmission(PCF8563_ADDR);
+    if (Wire.endTransmission() != 0) {
+      return false;
+    }
   }
 
   // 2. Register round trip. 0xA5 = AE_M=1 (alarm disabled) + BCD 25,
@@ -42,7 +41,7 @@ bool pcf8563IsPresent() {
   return ok;
 }
 
-bool pcf8563Init(bool debug) {
+bool pcf8563Configure(uint8_t periodSeconds) {
   if (!pcf8563IsPresent()) {
     return false;
   }
@@ -58,20 +57,7 @@ bool pcf8563Init(bool debug) {
   // CLKOUT off: FE = 0. FD[1:0] are don't-care once FE is clear.
   pcf8563WriteReg(PCF8563_REG_CLKOUT, 0x00);
 
-  // Periodic interrupt: leave alone if already running with the
-  // requested period, so the countdown phase survives deep-sleep wakes.
-  // The register check also catches the RTC having been reset without
-  // the ESP32 (after power-on, TE = 0 and TIE = 0).
-  uint8_t period = debug ? PERIOD_DEBUG_S : PERIOD_NORMAL_S;
-  uint8_t tmrCtrl = pcf8563ReadReg(PCF8563_REG_TMR_CTRL);
-  uint8_t ctrl2   = pcf8563ReadReg(PCF8563_REG_CTRL2);
-  bool timerRunning = (tmrCtrl & (PCF8563_BIT_TE | 0x03)) ==
-                      (PCF8563_BIT_TE | PCF8563_TD_1HZ);
-  bool intEnabled   = (ctrl2 & (PCF8563_BIT_TI_TP | PCF8563_BIT_TIE)) ==
-                      PCF8563_BIT_TIE;
-  if (!(timerRunning && intEnabled && configuredPeriod == period)) {
-    pcf8563ConfigureMinuteInterrupt(period);
-  }
+  pcf8563ConfigureMinuteInterrupt(periodSeconds);
 
   return true;
 }
@@ -93,8 +79,6 @@ void pcf8563ConfigureMinuteInterrupt(uint8_t periodSeconds) {
   //   AIE   = 0  -> alarm interrupt unused
   //   TIE   = 1  -> enable timer interrupt
   pcf8563WriteReg(PCF8563_REG_CTRL2, PCF8563_BIT_AF | PCF8563_BIT_TIE);
-
-  configuredPeriod = periodSeconds;
 }
 
 void pcf8563ClearTimerFlag() {
@@ -148,14 +132,18 @@ bool pcf8563ReadDateTime(uint8_t &year, uint8_t &month, uint8_t &day,
                           uint8_t &second) {
   // Registers 0x02-0x08 auto-increment, so one burst read covers the
   // full VL_seconds..Years range (Section 8, register organization).
-  Wire.beginTransmission(PCF8563_ADDR);
-  Wire.write(PCF8563_REG_VL_SECONDS);
-  Wire.endTransmission(false);
-  Wire.requestFrom(PCF8563_ADDR, (uint8_t)7);
-
+  // The Guard covers reading the bytes out as well as the transfer.
   uint8_t raw[7];
-  for (uint8_t i = 0; i < 7; i++) {
-    raw[i] = Wire.available() ? Wire.read() : 0xFF;
+  {
+    I2CBus::Guard bus;
+    Wire.beginTransmission(PCF8563_ADDR);
+    Wire.write(PCF8563_REG_VL_SECONDS);
+    Wire.endTransmission(false);
+    Wire.requestFrom(PCF8563_ADDR, (uint8_t)7);
+
+    for (uint8_t i = 0; i < 7; i++) {
+      raw[i] = Wire.available() ? Wire.read() : 0xFF;
+    }
   }
 
   bool vlSet = (raw[0] & 0x80) != 0;

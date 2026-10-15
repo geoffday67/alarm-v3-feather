@@ -3,11 +3,13 @@
 #include <Adafruit_GFX.h>
 #include <Arduino.h>
 #include <SPI.h>
+#include <Wire.h>
 
 #include "Display_EPD_W21.h"
 #include "Display_EPD_W21_spi.h"
 #include "Constants.h"
 #include "Fonts/ArialBold50pt.h"
+#include "I2CBus.h"
 #include "Sleep.h"
 #include "driver/gpio.h"
 
@@ -134,6 +136,23 @@ bool waitWhileBusy() {
   return true;
 }
 
+// Sends a single-byte command to the PIC. The I2C bus is already initialised
+// during wake (see main.cpp).
+void sendPicCommand(uint8_t command, const char* name) {
+  uint8_t result;
+  {
+    I2CBus::Guard bus;
+    Wire.beginTransmission(PIC_I2C_ADDRESS);
+    Wire.write(command);
+    result = Wire.endTransmission();
+  }
+  if (result == 0) {
+    Serial.printf("PIC: %s sent\n", name);
+  } else {
+    Serial.printf("PIC: %s failed, endTransmission() = %d\n", name, result);
+  }
+}
+
 }  // namespace
 
 // Interface inputs held through deep sleep, and their levels.
@@ -142,7 +161,7 @@ struct HeldPin {
   uint8_t level;
 };
 const HeldPin heldPins[] = {
-    {EPD_RST_PIN, HIGH},   // not in reset, so the panel stays in deep sleep
+    {EPD_RST_PIN, HIGH},   // not in reset, so the panel stays in mode-1 deep sleep
     {EPD_CS_PIN, HIGH},    // deselected
     {EPD_DC_PIN, LOW},
     {EPD_SCK_PIN, LOW},
@@ -167,7 +186,7 @@ void Display::init() {
   computeLayout("00:00:00");
 }
 
-void Display::prepareForSleep() {
+uint64_t Display::prepareForSleep() {
   // Take SCK/SDI back from the SPI peripheral so they can be driven as GPIOs.
   SPI.endTransaction();
   SPI.end();
@@ -180,9 +199,24 @@ void Display::prepareForSleep() {
     digitalWrite(p.pin, p.level);
     gpio_hold_en((gpio_num_t)p.pin);
   }
+
+  return 0;
 }
 
-void Display::showTime(time_t utc, bool full) {
+void Display::powerOnInit() {
+  // Blank screen apart from the alignment border.
+  renderTextToBuffer("");
+
+  EPD_HW_Init();
+  // Seeds both RAM planes with the current image; required once before
+  // any partial refreshes, or partial updates drift/ghost against stale RAM.
+  EPD_SetRAMValue_BaseMap(epdBuffer);
+
+  // RAM-retaining deep sleep, as after every update (see showTime()).
+  EPD_DeepSleep();
+}
+
+void Display::showTime(time_t utc) {
   struct tm local;
   localtime_r(&utc, &local);
 
@@ -193,20 +227,30 @@ void Display::showTime(time_t utc, bool full) {
 
   renderTextToBuffer(text);
 
-  if (full) {
-    EPD_HW_Init();
-    // Seeds both RAM planes with the current image; required once before
-    // any partial refreshes, or partial updates drift/ghost against stale RAM.
-    EPD_SetRAMValue_BaseMap(epdBuffer);
-  } else {
-    startPartialUpdate(epdBuffer);
-    if (!waitWhileBusy()) {
-      Serial.println("eInk: BUSY timeout");
-    }
+  startPartialUpdate(epdBuffer);
+  if (!waitWhileBusy()) {
+    Serial.println("eInk: BUSY timeout");
   }
 
+  // Deep sleep mode 1 (0x10 = 0x01) retains both RAM planes, so after an
+  // ESP32 deep-sleep wake the next partial refresh still has the previous
+  // image to work against, and no full refresh is needed.
   EPD_DeepSleep();
   Serial.printf("Display: %s %s\n", text, local.tm_isdst > 0 ? "(DST)" : "");
+
+  Sleep::release();
+}
+
+void Display::showFrontLight() {
+  // Light on, wait, light off. The PIC only fades between the two levels; the
+  // on time is timed here. Holds a Sleep inhibit so the chip can't go into
+  // deep sleep with the light left on. Blocks the caller for
+  // SCREEN_LIGHT_TIME, but with vTaskDelay(), so other tasks keep running.
+  Sleep::inhibit();
+
+  sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
+  vTaskDelay(pdMS_TO_TICKS(SCREEN_LIGHT_TIME));
+  sendPicCommand(I2C_COMMAND_EINK_LIGHT_OFF, "light off");
 
   Sleep::release();
 }

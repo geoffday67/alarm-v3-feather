@@ -17,6 +17,9 @@ namespace {
 
 EventBits_t bit;
 
+// PCF8563 timer interrupt period: 60 s in normal use, 10 s while debugging.
+constexpr uint8_t TICK_PERIOD_S = 10;
+
 // NTP is done with a single UDP exchange rather than the IDF/lwIP SNTP client
 // (configTime()), which in the IDF defaults waits a random 0-5 s before its
 // first request (CONFIG_LWIP_SNTP_STARTUP_DELAY / _MAXIMUM_STARTUP_DELAY) and
@@ -125,10 +128,10 @@ bool queryNtp(int64_t& serverUs, int64_t& localUs, int64_t& roundTripUs) {
       continue;
     }
 
-    bool valid = (r[0] & 0x07) == 4                // Mode = server
-                 && (r[0] >> 6) != 3               // LI 3 = server clock not synchronised
-                 && r[1] >= 1 && r[1] <= 15        // stratum (0 = kiss-o'-death)
-                 && readBE32(r + 24) == nonceHi    // originate = our transmit
+    bool valid = (r[0] & 0x07) == 4              // Mode = server
+                 && (r[0] >> 6) != 3             // LI 3 = server clock not synchronised
+                 && r[1] >= 1 && r[1] <= 15      // stratum (0 = kiss-o'-death)
+                 && readBE32(r + 24) == nonceHi  // originate = our transmit
                  && readBE32(r + 28) == nonceLo;
     if (!valid) {
       Serial.println("NTP: invalid reply ignored");
@@ -159,11 +162,6 @@ void clockTask(void* pparams) {
     if (!Clock::readUtc(utc)) {
       Serial.println("RTC time not valid (VL set)");
     }
-
-    // Flash the LED.
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(100);
-    digitalWrite(LED_BUILTIN, LOW);
 
     // Clear the timer flag, this makes the pin high again.
     pcf8563ClearTimerFlag();
@@ -201,6 +199,27 @@ void IRAM_ATTR clockHandler() {
 
 }  // namespace
 
+bool Clock::isWakeSource(uint64_t wakePins) {
+  return (wakePins & (1ULL << RTC_INTERRUPT_PIN)) != 0;
+}
+
+uint64_t Clock::prepareForSleep() {
+  detachInterrupt(digitalPinToInterrupt(RTC_INTERRUPT_PIN));
+
+  // The PCF8563 INT is open-drain, active low. Its pull-up must be enabled
+  // through the RTC IO driver to stay active while the HP domain is off.
+  //
+  // rtc_gpio_init() is needed first: after a power-on reset ESP-IDF gates the
+  // LP IO clock off (LPPERI_LP_IO_CK_EN), and rtc_gpio_pullup_en() doesn't turn
+  // it back on, so without this the pull-up write to LP_IO is silently lost.
+  rtc_gpio_init((gpio_num_t)RTC_INTERRUPT_PIN);
+  rtc_gpio_set_direction((gpio_num_t)RTC_INTERRUPT_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+  rtc_gpio_pullup_en((gpio_num_t)RTC_INTERRUPT_PIN);
+  rtc_gpio_pulldown_dis((gpio_num_t)RTC_INTERRUPT_PIN);
+
+  return 1ULL << RTC_INTERRUPT_PIN;
+}
+
 bool Clock::readUtc(time_t& utc) {
   uint8_t year, month, day, weekday, hour, minute, second;
   bool valid = pcf8563ReadDateTime(year, month, day, weekday, hour, minute, second);
@@ -209,22 +228,22 @@ bool Clock::readUtc(time_t& utc) {
   return valid;
 }
 
-void Clock::init() {
-  bit = Utils::getNextEventBit();
-  Utils::startTask(clockTask, "clock");
-
-  if (pcf8563Init(/*debug*/ true)) {
-    Serial.println("RTC module initialised");
+void Clock::powerOnInit() {
+  if (pcf8563Configure(TICK_PERIOD_S)) {
+    Serial.println("RTC module configured");
   } else {
     Serial.println("RTC MODULE NOT FOUND!!");
   }
+}
+
+void Clock::init() {
+  bit = Utils::getNextEventBit();
+  Utils::startTask(clockTask, "clock");
 
   // Release the pin from LP control so we can use it.
   rtc_gpio_deinit((gpio_num_t)RTC_INTERRUPT_PIN);
   pinMode(RTC_INTERRUPT_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(RTC_INTERRUPT_PIN), clockHandler, ONLOW);
-
-  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 bool Clock::syncNetworkTime() {
@@ -271,14 +290,15 @@ bool Clock::syncNetworkTime() {
   pcf8563SetDateTime(utc.tm_year - 100,  // tm_year is from 1900; RTC year is 0-99 from 2000
                      utc.tm_mon + 1,     // tm_mon 0-11; RTC month 1-12
                      utc.tm_mday,
-                     utc.tm_wday,        // both 0 = Sunday
+                     utc.tm_wday,  // both 0 = Sunday
                      utc.tm_hour, utc.tm_min, utc.tm_sec);
   int64_t writeUs = esp_timer_get_time() - writeStart;
 
   // Logged to check against RTC_WRITE_US.
-  Serial.printf("RTC set from NTP: %04d-%02d-%02d %02d:%02d:%02d UTC "
-                "(round trip %lld us, RTC write took %lld us)\n",
-                utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
-                utc.tm_hour, utc.tm_min, utc.tm_sec, roundTripUs, writeUs);
+  Serial.printf(
+      "RTC set from NTP: %04d-%02d-%02d %02d:%02d:%02d UTC "
+      "(round trip %lld us, RTC write took %lld us)\n",
+      utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+      utc.tm_hour, utc.tm_min, utc.tm_sec, roundTripUs, writeUs);
   return true;
 }

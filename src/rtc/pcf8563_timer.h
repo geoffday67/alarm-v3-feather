@@ -41,24 +41,18 @@
 // CLKOUT_control (0x0D) bit positions — Table 22
 #define PCF8563_BIT_FE        (1 << 7)  // 1 = CLKOUT active (power-on default)
 
-// One-call setup, safe to run on every boot including each deep-sleep
-// wake. Requires Wire.begin() and IO20 high (bus pull-ups on VSENSOR).
+// One-time setup. The PCF8563 keeps its registers for as long as it's
+// powered, through the ESP32's deep sleep, so this is called on the ESP32's
+// cold boot only (Clock::powerOnInit()).
+// Requires Wire.begin() and IO20 high (bus pull-ups on VSENSOR).
 //   1. Checks the RTC is present (pcf8563IsPresent); returns false if not.
 //   2. Clears STOP/TESTC in Control_status_1 if either is set.
 //   3. Disables CLKOUT (power-on default is 32.768 kHz, ~0.3 uA extra).
-//   4. Sets up the periodic interrupt: once per minute, or once every
-//      5 s when debug is true. Skipped if the timer is already running
-//      with the requested period. Reloading the timer on every wake
-//      would restart the countdown, so each period would be lengthened
-//      by the wake-to-init latency.
-// The countdown period can't be read back from the chip (reading the
-// Timer register returns the current count), so the configured period
-// is remembered in LP RAM (RTC_DATA_ATTR). That survives deep sleep but
-// is cleared by any other reset, so changing debug and reflashing
-// always takes effect.
-// Does not clear TF (call pcf8563ClearTimerFlag() after handling the
-// wake) and does not check VL (call pcf8563IsTimeValid()).
-bool pcf8563Init(bool debug = false);
+//   4. Starts the periodic timer interrupt every periodSeconds (see
+//      pcf8563ConfigureMinuteInterrupt). This restarts the countdown and
+//      clears TF.
+// Does not check VL (call pcf8563IsTimeValid()) or set the time.
+bool pcf8563Configure(uint8_t periodSeconds);
 
 // Configures the timer to assert INT every periodSeconds (1 Hz source,
 // countdown = periodSeconds, 1-255; default 60 = once per minute). INT

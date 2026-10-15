@@ -430,30 +430,8 @@
       </alphaPercent>
       <points>
         <point x="2.3" y="0.9"/>
-        <point x="2.3" y="1.2"/>
-        <point x="2.3" y="1.05"/>
-      </points>
-      <bodyColor hex="ffffff"/>
-      <borderColor hex="000000"/>
-      <labelColor hex="000000"/>
-      <leadColor hex="0000ff"/>
-      <display>NAME</display>
-      <flipStanding>false</flipStanding>
-      <labelOriantation>Directional</labelOriantation>
-      <moveLabel>false</moveLabel>
-      <hideShortLeads>false</hideShortLeads>
-      <style>SOLID</style>
-    </diylc.connectivity.Jumper>
-    <diylc.connectivity.Jumper>
-      <id>3910749f-1739-410b-a4e3-d73d12f37022</id>
-      <name>J7</name>
-      <alphaPercent>
-        <value>100</value>
-      </alphaPercent>
-      <points>
-        <point x="2.4" y="0.8"/>
-        <point x="2.4" y="1.1"/>
-        <point x="2.4" y="0.95"/>
+        <point x="2.3" y="1.1"/>
+        <point x="2.3" y="1.0"/>
       </points>
       <bodyColor hex="ffffff"/>
       <borderColor hex="000000"/>
@@ -751,29 +729,6 @@
       <bodyColor hex="808080"/>
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
-    <diylc.electromechanical.PinHeader>
-      <id>afdf0560-207d-4e3c-a15c-e781932dd30e</id>
-      <name>PH3</name>
-      <alphaPercent>
-        <value>100</value>
-      </alphaPercent>
-      <orientation>_180</orientation>
-      <controlPoints>
-        <point x="2.8" y="1.6"/>
-        <point x="2.8" y="1.5"/>
-        <point x="2.8" y="1.4"/>
-        <point x="2.8" y="1.3"/>
-        <point x="2.8" y="1.2"/>
-        <point x="2.8" y="1.1"/>
-      </controlPoints>
-      <rowCount>1</rowCount>
-      <columnCount>6</columnCount>
-      <spacing value="0.1" unit="in"/>
-      <shrouded>true</shrouded>
-      <nodeNames></nodeNames>
-      <bodyColor hex="808080"/>
-      <shroudColor hex="595959"/>
-    </diylc.electromechanical.PinHeader>
     <diylc.semiconductors.DIL__IC>
       <id>b55f82df-82d4-4f83-ae79-fe4d6f402ff5</id>
       <name>IC1</name>
@@ -841,8 +796,8 @@
       <width value="2.0" unit="mm"/>
       <points>
         <point x="2.2" y="1.3"/>
-        <point x="2.6" y="1.3"/>
-        <point x="2.4" y="1.3"/>
+        <point x="2.6" y="1.2"/>
+        <point x="2.4" y="1.25"/>
       </points>
       <bodyColor hex="82cffd"/>
       <borderColor hex="5b90b1"/>
@@ -1071,8 +1026,8 @@
     <diylc.misc.Label>
       <id>3f4b0dbb-f67d-4a78-95ae-0ff8ec03c341</id>
       <name>LAB10</name>
-      <point x="2.965" y="1.35"/>
-      <text>+3V3&lt;br&gt;Gnd&lt;br&gt;SD&lt;br&gt;I2S&lt;br&gt;I2S&lt;br&gt;I2S</text>
+      <point x="3.1" y="1.3"/>
+      <text>Vin&lt;br&gt;Gnd&lt;br&gt;SD&lt;br&gt;Gain&lt;br&gt;I2S&lt;br&gt;I2S&lt;br&gt;I2S</text>
       <font name="Dialog" size="16" style="0"/>
       <color hex="333333"/>
       <horizontalAlignment>LEFT</horizontalAlignment>
@@ -2001,6 +1956,51 @@
       <arrowStart>true</arrowStart>
       <arrowEnd>false</arrowEnd>
     </diylc.connectivity.Line>
+    <diylc.shapes.Rectangle>
+      <id>d498d36c-1d52-4d91-a6f8-012866cc8e12</id>
+      <name>RECT2</name>
+      <alphaPercent>
+        <value>5E+1</value>
+      </alphaPercent>
+      <value></value>
+      <controlPoints>
+        <point x="2.2" y="1.0"/>
+        <point x="2.8" y="1.6"/>
+      </controlPoints>
+      <firstPoint x="2.2" y="1.0"/>
+      <secondPoint x="2.8" y="1.6"/>
+      <color hex="999999"/>
+      <borderColor hex="000000"/>
+      <borderThickness value="0.2" unit="mm"/>
+      <length value="20.32" unit="mm"/>
+      <width value="12.7" unit="mm"/>
+      <mode>TwoPoints</mode>
+      <edgeRadius value="0.0" unit="mm"/>
+    </diylc.shapes.Rectangle>
+    <diylc.electromechanical.PinHeader>
+      <id>7cefb486-f994-44ec-9d97-1d071b37470c</id>
+      <name>PH3</name>
+      <alphaPercent>
+        <value>100</value>
+      </alphaPercent>
+      <orientation>DEFAULT</orientation>
+      <controlPoints>
+        <point x="2.9" y="1.0"/>
+        <point x="2.9" y="1.1"/>
+        <point x="2.9" y="1.2"/>
+        <point x="2.9" y="1.3"/>
+        <point x="2.9" y="1.4"/>
+        <point x="2.9" y="1.5"/>
+        <point x="2.9" y="1.6"/>
+      </controlPoints>
+      <rowCount>1</rowCount>
+      <columnCount>7</columnCount>
+      <spacing value="0.1" unit="in"/>
+      <shrouded>false</shrouded>
+      <nodeNames></nodeNames>
+      <bodyColor hex="808080"/>
+      <shroudColor hex="595959"/>
+    </diylc.electromechanical.PinHeader>
     <diylc.misc.Label>
       <id>8137e85d-a96d-4519-a846-5dd9bf6f238b</id>
       <name>LAB21</name>

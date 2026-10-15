@@ -17,14 +17,14 @@
 #include "Sleep.h"
 #include "Utils.h"
 #include "WiFi.h"
+#include "Wireless.h"
+#include "I2CBus.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 #include "esp_partition.h"
 #include "esp_sleep.h"
 #include "soc/lp_io_struct.h"
 #include "soc/lpperi_struct.h"
-#include "rtc/pcf8563_timer.h"
-#include "Wireless.h"
 
 #if INCLUDE_vTaskSuspend != 1
 #error "INCLUDE_vTaskSuspend is not 1 -- portMAX_DELAY will NOT block indefinitely"
@@ -33,18 +33,6 @@
 // ESP32PDMAudio audio(0);  // single PDM output
 ESP32I2SAudio audio(I2S_BLCK, I2S_LRC, I2S_DIN);
 BackgroundAudioMP3 mp3(audio);
-
-// TEMPORARY DIAGNOSTIC: alternately sends the eInk light ON/OFF command to
-// the PIC16F15225 over I2C every 500ms, to test the command protocol before
-// this is driven by real logic. Remove once that's confirmed working.
-unsigned long lastI2CCommandSent = 0;
-bool nextI2CCommandIsLightOn = true;
-
-// TEMPORARY DIAGNOSTIC: times how long the panel's BUSY line stays high after
-// triggering a partial update, for a few different window sizes. Answers
-// whether a small (arrow-indicator-sized) window refreshes meaningfully
-// faster than a full-frame update, or whether ~0.3s is a fixed floor
-// regardless of window size. Remove once that's answered.
 
 // Same as startPartialUpdate() in Display.cpp, but targets an arbitrary sub-window
 // instead of the whole frame, mirroring EPD_Dis_Part()'s window setup.
@@ -182,19 +170,32 @@ uint8_t getHourSetting() {
   return bestPosition;
 }
 
+// Cold boot only (power-on, reset, reflash). Runs after Display::init(),
+// which powerOnInit() needs, but before Clock::init() and TopButton::init():
+// the clock task mustn't do a partial refresh before Display::powerOnInit()
+// has seeded the panel, or call Display::showTime() concurrently with the
+// one below.
 void powerOnInit() {
-    // Connect WiFi and get the time via NTP.
-    if (Wireless::connectWiFi()) {
-      Clock::syncNetworkTime();
-    }
-    Wireless::disconnectWiFi();
+  Display::powerOnInit();
+  Serial.println("Display power-on initialised");
 
-    time_t utc;
-    if (!Clock::readUtc(utc)) {
-      Serial.println("RTC time not valid (VL set)");
-    }
-    Display::showTime(utc, /*full*/ true);
+  Clock::powerOnInit();
+  Serial.println("Clock power-on initialised");
 
+  TopButton::powerOnInit();
+  Serial.println("Top button power-on initialised");
+
+  // Connect WiFi and get the time via NTP.
+  if (Wireless::connectWiFi()) {
+    Clock::syncNetworkTime();
+  }
+  Wireless::disconnectWiFi();
+
+  time_t utc;
+  if (!Clock::readUtc(utc)) {
+    Serial.println("RTC time not valid (VL set)");
+  }
+  Display::showTime(utc);
 }
 
 void setup() {
@@ -217,44 +218,51 @@ void setup() {
   // STEMMA QT connector). The Arduino IDE's Adafruit board package does this
   // automatically via initVariant().
 
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  Wire.setClock(100000);
+  I2CBus::begin(I2C_SDA_PIN, I2C_SCL_PIN, 100000);
   Serial.println("I2C bus initialised");
 
-  // Display must be set up before Clock::init() starts the clock task, which
-  // calls Display::showTime() on each RTC tick.
+  // Display must be set up before powerOnInit() and Clock::init(), which
+  // both use the panel.
   Display::init();
   Serial.println("Display initialised");
 
-  // Cold boot (power-on, reset button, reflash): the panel needs a full init
-  // and refresh before partial refreshes will work. On a deep-sleep wake the
-  // panel still holds that, so the clock task's partial refresh is enough.
-  if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT1) {
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
+    // Woken by one (or both) of the external pins. Logged only; each
+    // module's init() handles its own pending interrupt.
+    uint64_t wakePins = esp_sleep_get_ext1_wakeup_status();
+    if (Clock::isWakeSource(wakePins)) {
+      Serial.println("Woken by the clock");
+    }
+    if (wakePins & (1ULL << TOP_SWITCH_PIN)) {
+      Serial.println("Woken by the button");
+    }
+  } else {
+    // Power-on, reset, reflash etc.: configure external hardware once.
     powerOnInit();
   }
 
+  // Every boot: set up each module's tasks and interrupts.
   Clock::init();
   Serial.println("Clock initialised");
+
+  TopButton::init();
+  Serial.println("Top button initialised");
 
   // Block until nothing is holding off sleep (e.g. the RTC tick that woke us
   // has been handled, TF cleared and the display updated).
   Sleep::waitUntilAllowed();
 
-  // Wake from deep sleep when the PCF8563 INT (open-drain, active low) pulls
-  // RTC_INTERRUPT_PIN low. Level detection via ext1; the pull-up must be
-  // enabled through the RTC IO driver to stay active while the HP domain is off.
-  //
-  // rtc_gpio_init() is needed first: after a power-on reset ESP-IDF gates the
-  // LP IO clock off (LPPERI_LP_IO_CK_EN), and rtc_gpio_pullup_en() doesn't turn
-  // it back on, so without this the pull-up write to LP_IO is silently lost.
-  detachInterrupt(digitalPinToInterrupt(RTC_INTERRUPT_PIN));
-  rtc_gpio_init((gpio_num_t)RTC_INTERRUPT_PIN);
-  rtc_gpio_set_direction((gpio_num_t)RTC_INTERRUPT_PIN, RTC_GPIO_MODE_INPUT_ONLY);
-  rtc_gpio_pullup_en((gpio_num_t)RTC_INTERRUPT_PIN);
-  rtc_gpio_pulldown_dis((gpio_num_t)RTC_INTERRUPT_PIN);
-  esp_sleep_enable_ext1_wakeup(1ULL << RTC_INTERRUPT_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+  Serial.printf("Sleeping\n\n\n");
+  Serial.flush();
 
-  Display::prepareForSleep();
+  // Every module gets its pins ready for deep sleep and returns the ext1
+  // mask bits of any wake sources it owns (0 if none). All wake sources are
+  // active-low.
+  uint64_t wakeMask = 0;
+  wakeMask |= Display::prepareForSleep();
+  wakeMask |= Clock::prepareForSleep();
+  wakeMask |= TopButton::prepareForSleep();
+  esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
 
   esp_deep_sleep_start();
 
@@ -270,10 +278,6 @@ void setup() {
   pinMode(HOUR_LADDER_PIN, INPUT);
   pinMode(MINUTE_LADDER_PIN, INPUT);
   Serial.println("Alarm ladders initialised");
-
-  // TopButton::init();
-  pinMode(TOP_SWITCH_PIN, INPUT_PULLUP);
-  Serial.println("Top button initialised");
 
   audioFile = LittleFS.open("/xmorning.mp3");
   if (!audioFile) {
