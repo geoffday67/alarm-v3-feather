@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <rotary.h>
 
+#include "Alarm.h"
 #include "Button.h"
 #include "Clock.h"
 #include "Constants.h"
@@ -138,38 +139,6 @@ void showDiagnostics() {
 File audioFile;
 uint8_t fileBuf[512];
 
-// Measured ADC millivolt readings for each of the 12 switch positions.
-// These are placeholders — replace them with values you actually measure
-// on your board, since resistor tolerance and the ADC's nonlinearity
-// near 0V/3.3V (discussed earlier) mean theoretical even spacing won't
-// match reality closely enough to rely on.
-const uint16_t HOUR_POSITION_MV[12] = {
-    2, 300, 600, 900, 1202, 1503,
-    1800, 2098, 2397, 2700, 3001, 3302};
-
-const uint16_t HOUR_TOLERANCE_MV = 100;  // max acceptable deviation from a known position
-
-uint8_t getHourSetting() {
-  uint16_t reading = analogReadMilliVolts(A0);
-
-  uint8_t bestPosition = 0;
-  uint16_t bestDiff = UINT16_MAX;
-
-  for (uint8_t i = 0; i < 12; i++) {
-    uint16_t diff = abs((int)reading - (int)HOUR_POSITION_MV[i]);
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestPosition = i + 1;  // switch positions are 1-12
-    }
-  }
-
-  if (bestDiff > HOUR_TOLERANCE_MV) {
-    return 0;  // reading doesn't confidently match any known position
-  }
-
-  return bestPosition;
-}
-
 // Cold boot only (power-on, reset, reflash). Runs after Display::init(),
 // which powerOnInit() needs, but before Clock::init() and TopButton::init():
 // the clock task mustn't do a partial refresh before Display::powerOnInit()
@@ -248,6 +217,9 @@ void setup() {
   TopButton::init();
   Serial.println("Top button initialised");
 
+  Alarm::init();
+  Serial.println("Alarm initialised");
+
   // Block until nothing is holding off sleep (e.g. the RTC tick that woke us
   // has been handled, TF cleared and the display updated).
   Sleep::waitUntilAllowed();
@@ -273,11 +245,6 @@ void setup() {
   Serial.println("LittleFS initialised");
 
   showDiagnostics();
-
-  pinMode(LADDER_POWER_PIN, OUTPUT);
-  pinMode(HOUR_LADDER_PIN, INPUT);
-  pinMode(MINUTE_LADDER_PIN, INPUT);
-  Serial.println("Alarm ladders initialised");
 
   audioFile = LittleFS.open("/xmorning.mp3");
   if (!audioFile) {
@@ -320,7 +287,10 @@ void loop() {
   // }
   // delay(2000);
 
-  // Serial.println(getHourSetting());
+  // uint8_t alarmHour, alarmMinute;
+  // if (Alarm::readSetTime(alarmHour, alarmMinute)) {
+  //   Serial.printf("Alarm set to %02u:%02u\n", alarmHour, alarmMinute);
+  // }
   // delay(1000);
 
   while (audioFile && mp3.availableForWrite() > (int)sizeof(fileBuf)) {

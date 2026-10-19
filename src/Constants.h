@@ -1,6 +1,5 @@
 #define TOP_SWITCH_PIN   6
 
-#define LADDER_POWER_PIN 15
 #define HOUR_LADDER_PIN 1
 #define MINUTE_LADDER_PIN 4
 

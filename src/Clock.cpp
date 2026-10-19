@@ -4,6 +4,7 @@
 #include <NetworkUdp.h>
 #include <time.h>
 
+#include "Alarm.h"
 #include "Constants.h"
 #include "Display.h"
 #include "Sleep.h"
@@ -159,7 +160,8 @@ void clockTask(void* pparams) {
     // Read the time fresh from the RTC on every tick (nothing is carried
     // over between wakes).
     time_t utc;
-    if (!Clock::readUtc(utc)) {
+    bool utcValid = Clock::readUtc(utc);
+    if (!utcValid) {
       Serial.println("RTC time not valid (VL set)");
     }
 
@@ -168,6 +170,13 @@ void clockTask(void* pparams) {
 
     // Enable the interrupt again as we've reset the interrupting pin.
     enableInterrupt(RTC_INTERRUPT_PIN);
+
+    // Skipped while the RTC time can't be trusted, so a bad time is never
+    // recorded as the last wake.
+    if (utcValid && Alarm::isDue(utc)) {
+      Serial.println("Alarm due");
+      // TODO: sound the alarm.
+    }
 
     // Blocks this task until the panel has finished (~0.3 s). Display holds
     // its own sleep inhibit, so this would be safe even outside the one
