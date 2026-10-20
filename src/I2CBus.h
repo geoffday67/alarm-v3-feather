@@ -28,6 +28,10 @@ void begin(int sdaPin, int sclPin, uint32_t frequency);
 void lock();
 void unlock();
 
+// Sends a single-byte command to the PIC and logs the result. Takes the bus
+// lock itself, so don't call it while holding a Guard.
+void sendPicCommand(uint8_t command, const char* name);
+
 // Scoped lock: takes the bus on construction, releases it on destruction.
 class Guard {
  public:

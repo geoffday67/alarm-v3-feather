@@ -54,6 +54,13 @@ bool Wireless::connectWiFi() {
   }
   Serial.println();
   Serial.printf("Connected as %s to access point %s\n", WiFi.localIP().toString().c_str(), WiFi.BSSIDstr().c_str());
+
+  // Disable modem sleep (Arduino default WIFI_PS_MIN_MODEM) for the short
+  // time WiFi is up. With it on, the station only wakes at each DTIM beacon
+  // to collect buffered frames, which can delay the NTP reply by up to the
+  // AP's DTIM period. Set after connecting so the driver's start/connect
+  // handling can't reapply the default.
+  WiFi.setSleep(false);
   result = true;
 
 exit:

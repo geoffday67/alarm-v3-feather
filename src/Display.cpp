@@ -3,7 +3,6 @@
 #include <Adafruit_GFX.h>
 #include <Arduino.h>
 #include <SPI.h>
-#include <Wire.h>
 
 #include "Display_EPD_W21.h"
 #include "Display_EPD_W21_spi.h"
@@ -12,6 +11,7 @@
 #include "I2CBus.h"
 #include "Sleep.h"
 #include "driver/gpio.h"
+#include "Moomin.h"
 
 namespace {
 
@@ -136,23 +136,6 @@ bool waitWhileBusy() {
   return true;
 }
 
-// Sends a single-byte command to the PIC. The I2C bus is already initialised
-// during wake (see main.cpp).
-void sendPicCommand(uint8_t command, const char* name) {
-  uint8_t result;
-  {
-    I2CBus::Guard bus;
-    Wire.beginTransmission(PIC_I2C_ADDRESS);
-    Wire.write(command);
-    result = Wire.endTransmission();
-  }
-  if (result == 0) {
-    Serial.printf("PIC: %s sent\n", name);
-  } else {
-    Serial.printf("PIC: %s failed, endTransmission() = %d\n", name, result);
-  }
-}
-
 }  // namespace
 
 // Interface inputs held through deep sleep, and their levels.
@@ -248,9 +231,12 @@ void Display::showFrontLight() {
   // SCREEN_LIGHT_TIME, but with vTaskDelay(), so other tasks keep running.
   Sleep::inhibit();
 
-  sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
-  vTaskDelay(pdMS_TO_TICKS(SCREEN_LIGHT_TIME));
-  sendPicCommand(I2C_COMMAND_EINK_LIGHT_OFF, "light off");
+  // TESTING
+  Moomin::pulse();
+
+  // I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
+  // vTaskDelay(pdMS_TO_TICKS(SCREEN_LIGHT_TIME));
+  // I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_OFF, "light off");
 
   Sleep::release();
 }

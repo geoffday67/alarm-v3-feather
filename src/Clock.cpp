@@ -25,14 +25,27 @@ constexpr uint8_t TICK_PERIOD_S = 10;
 // (configTime()), which in the IDF defaults waits a random 0-5 s before its
 // first request (CONFIG_LWIP_SNTP_STARTUP_DELAY / _MAXIMUM_STARTUP_DELAY) and
 // retries only after lwIP's 15 s SNTP_RECV_TIMEOUT. Here the request goes out
-// immediately, with a short timeout and quick retries, and the reply's
-// timestamps are used directly - with round-trip compensation - to time the
-// RTC write.
-constexpr const char* NTP_SERVER = "pool.ntp.org";
+// immediately, with quick retries, and the reply's timestamps are used
+// directly - with round-trip compensation - to time the RTC write.
+//
+// Each retry goes to a different pool hostname. lwIP's resolver caches a name
+// for its DNS TTL and NetworkUDP uses only the first address returned, so
+// repeated lookups of one name would keep hitting the same (possibly
+// unresponsive or rate-limiting) server.
+constexpr const char* NTP_SERVERS[] = {
+    "0.uk.pool.ntp.org",
+    "1.uk.pool.ntp.org",
+    "2.uk.pool.ntp.org",
+};
+constexpr int NTP_ATTEMPTS = sizeof(NTP_SERVERS) / sizeof(NTP_SERVERS[0]);
 constexpr uint16_t NTP_SERVER_PORT = 123;
 constexpr uint16_t NTP_LOCAL_PORT = 2390;
-constexpr int NTP_ATTEMPTS = 3;
-constexpr int64_t NTP_REPLY_TIMEOUT_US = 1000000;
+// With no reply, the next request goes out this long after the previous one.
+// All requests share one socket, so a late reply to an earlier one is still
+// accepted.
+constexpr int64_t NTP_RESEND_US = 1000000;
+// After the last request, replies to any of them are awaited this long.
+constexpr int64_t NTP_FINAL_WAIT_US = 3000000;
 constexpr int NTP_PACKET_SIZE = 48;
 
 // Seconds from the NTP epoch (1900-01-01) to the Unix epoch (1970-01-01).
@@ -80,9 +93,44 @@ int64_t daysFromCivil(int y, unsigned m, unsigned d) {
   return (int64_t)era * 146097 + (int64_t)doe - 719468;
 }
 
-// One request/reply. On success returns the server's time (us since 1900)
-// at the local esp_timer instant localUs, corrected for half the network
-// round trip, and the round trip itself.
+// One outstanding client request: its server, nonce and local send time.
+struct NtpRequest {
+  const char* host;
+  uint32_t nonceHi;
+  uint32_t nonceLo;
+  int64_t t1;
+};
+
+// Sends a client request to host on udp's socket, filling in req.
+bool sendNtpRequest(NetworkUDP& udp, const char* host, NtpRequest& req) {
+  // Client request: LI = 0, VN = 4, Mode = 3. A random transmit timestamp
+  // acts as a nonce - the server echoes it as the reply's originate
+  // timestamp, so a stale or spoofed reply can be rejected.
+  uint8_t pkt[NTP_PACKET_SIZE] = {0};
+  pkt[0] = 0x23;
+  req.nonceHi = esp_random();
+  req.nonceLo = esp_random();
+  writeBE32(pkt + 40, req.nonceHi);
+  writeBE32(pkt + 44, req.nonceLo);
+
+  if (!udp.beginPacket(host, NTP_SERVER_PORT)) {
+    Serial.printf("NTP: DNS lookup or socket failed for %s\n", host);
+    return false;
+  }
+  udp.write(pkt, NTP_PACKET_SIZE);
+  if (!udp.endPacket()) {
+    Serial.printf("NTP: send to %s failed\n", host);
+    return false;
+  }
+  req.t1 = esp_timer_get_time();
+  req.host = host;
+  return true;
+}
+
+// Sends up to NTP_ATTEMPTS requests, one per server, NTP_RESEND_US apart,
+// stopping at the first valid reply to any of them. On success returns the
+// server's time (us since 1900) at the local esp_timer instant localUs,
+// corrected for half the network round trip, and the round trip itself.
 bool queryNtp(int64_t& serverUs, int64_t& localUs, int64_t& roundTripUs) {
   NetworkUDP udp;
   if (!udp.begin(NTP_LOCAL_PORT)) {
@@ -90,32 +138,32 @@ bool queryNtp(int64_t& serverUs, int64_t& localUs, int64_t& roundTripUs) {
     return false;
   }
 
-  // Client request: LI = 0, VN = 4, Mode = 3. A random transmit timestamp
-  // acts as a nonce - the server echoes it as the reply's originate
-  // timestamp, so a stale or spoofed reply can be rejected.
-  uint8_t pkt[NTP_PACKET_SIZE] = {0};
-  pkt[0] = 0x23;
-  uint32_t nonceHi = esp_random();
-  uint32_t nonceLo = esp_random();
-  writeBE32(pkt + 40, nonceHi);
-  writeBE32(pkt + 44, nonceLo);
+  NtpRequest reqs[NTP_ATTEMPTS];
+  int sent = 0;           // requests in reqs[0..sent)
+  int next = 0;           // index of the next server to try
+  int64_t deadline = 0;   // when to send the next request, or give up
 
-  if (!udp.beginPacket(NTP_SERVER, NTP_SERVER_PORT)) {
-    Serial.println("NTP: DNS lookup or socket failed");
-    udp.stop();
-    return false;
-  }
-  udp.write(pkt, NTP_PACKET_SIZE);
-  if (!udp.endPacket()) {
-    Serial.println("NTP: send failed");
-    udp.stop();
-    return false;
-  }
-  int64_t t1 = esp_timer_get_time();
+  while (true) {
+    if (esp_timer_get_time() >= deadline) {
+      if (next == NTP_ATTEMPTS) {
+        break;
+      }
+      bool ok = sendNtpRequest(udp, NTP_SERVERS[next], reqs[sent]);
+      if (ok) {
+        sent++;
+      }
+      next++;
+      if (next == NTP_ATTEMPTS && sent == 0) {
+        break;
+      }
+      // After a failed send (e.g. DNS), try the next server straight away.
+      int64_t waitUs = next < NTP_ATTEMPTS ? (ok ? NTP_RESEND_US : 0) : NTP_FINAL_WAIT_US;
+      deadline = esp_timer_get_time() + waitUs;
+      continue;
+    }
 
-  // parsePacket() is non-blocking (recvfrom with MSG_DONTWAIT). Polling every
-  // 1 ms tick adds up to 1 ms of uncertainty to t4.
-  while (esp_timer_get_time() - t1 < NTP_REPLY_TIMEOUT_US) {
+    // parsePacket() is non-blocking (recvfrom with MSG_DONTWAIT). Polling
+    // every 1 ms tick adds up to 1 ms of uncertainty to t4.
     int len = udp.parsePacket();
     if (len <= 0) {
       vTaskDelay(1);
@@ -129,21 +177,36 @@ bool queryNtp(int64_t& serverUs, int64_t& localUs, int64_t& roundTripUs) {
       continue;
     }
 
-    bool valid = (r[0] & 0x07) == 4              // Mode = server
-                 && (r[0] >> 6) != 3             // LI 3 = server clock not synchronised
-                 && r[1] >= 1 && r[1] <= 15      // stratum (0 = kiss-o'-death)
-                 && readBE32(r + 24) == nonceHi  // originate = our transmit
-                 && readBE32(r + 28) == nonceLo;
+    if (r[1] == 0) {
+      // Kiss-o'-death: the reference ID holds a 4-character code, e.g. RATE.
+      Serial.printf("NTP: kiss-o'-death %.4s ignored\n", (const char*)(r + 12));
+      continue;
+    }
+    bool valid = (r[0] & 0x07) == 4   // Mode = server
+                 && (r[0] >> 6) != 3  // LI 3 = server clock not synchronised
+                 && r[1] <= 15;       // stratum
     if (!valid) {
       Serial.println("NTP: invalid reply ignored");
       continue;
     }
 
+    // Match the originate timestamp against every request sent so far.
+    int i = 0;
+    while (i < sent && !(readBE32(r + 24) == reqs[i].nonceHi && readBE32(r + 28) == reqs[i].nonceLo)) {
+      i++;
+    }
+    if (i == sent) {
+      Serial.println("NTP: unmatched reply ignored");
+      continue;
+    }
+
+    int64_t t1 = reqs[i].t1;
     int64_t t2 = ntpToUs(r + 32);  // server receive
     int64_t t3 = ntpToUs(r + 40);  // server transmit
     roundTripUs = (t4 - t1) - (t3 - t2);
     serverUs = t3 + roundTripUs / 2;
     localUs = t4;
+    Serial.printf("NTP: reply to request %d of %d (%s), round trip %lld us\n", i + 1, sent, reqs[i].host, roundTripUs);
     udp.stop();
     return true;
   }
@@ -257,11 +320,7 @@ void Clock::init() {
 
 bool Clock::syncNetworkTime() {
   int64_t serverUs = 0, localUs = 0, roundTripUs = 0;
-  bool ok = false;
-  for (int attempt = 0; attempt < NTP_ATTEMPTS && !ok; attempt++) {
-    ok = queryNtp(serverUs, localUs, roundTripUs);
-  }
-  if (!ok) {
+  if (!queryNtp(serverUs, localUs, roundTripUs)) {
     Serial.println("NTP sync failed");
     return false;
   }
