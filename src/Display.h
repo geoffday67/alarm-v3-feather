@@ -45,5 +45,7 @@ uint64_t prepareForSleep();
 // BUSY with vTaskDelay(), so other tasks keep running.
 void showTime(time_t utc);
 
+// Turns the eInk front light on. The PIC turns it off itself after its own
+// on-time, so this returns as soon as the command is sent.
 void showFrontLight();
 }  // namespace Display

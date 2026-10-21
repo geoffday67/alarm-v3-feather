@@ -685,17 +685,6 @@
       <shroudColor hex="595959"/>
     </diylc.electromechanical.PinHeader>
     <diylc.misc.Label>
-      <id>54270b0c-7fc2-417a-ac11-56c38fd9c6d6</id>
-      <name>LAB1</name>
-      <point x="0.5" y="0.8"/>
-      <text>Alarm dials</text>
-      <font name="Dialog" size="14" style="0"/>
-      <color hex="000000"/>
-      <horizontalAlignment>CENTER</horizontalAlignment>
-      <verticalAlignment>CENTER</verticalAlignment>
-      <orientation>DEFAULT</orientation>
-    </diylc.misc.Label>
-    <diylc.misc.Label>
       <id>d438b91b-86bc-486b-9e00-ad06ebc6e3b7</id>
       <name>LAB4</name>
       <point x="2.9" y="2.0"/>
@@ -1039,7 +1028,7 @@
       <name>LAB7</name>
       <point x="3.4" y="2.3"/>
       <text>+3V3</text>
-      <font reference="../../diylc.misc.Label/font"/>
+      <font name="Dialog" size="14" style="0"/>
       <color hex="000000"/>
       <horizontalAlignment>LEFT</horizontalAlignment>
       <verticalAlignment>CENTER</verticalAlignment>

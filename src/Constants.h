@@ -17,14 +17,14 @@
 // Must match the address programmed into the PIC's SSP1ADD.
 #define PIC_I2C_ADDRESS 0x08
 
-// Must match the PIC.
+// Must match the PIC. EINK_LIGHT_ON fades the front light on and the PIC turns
+// it off itself after its own on-time (EINK_LIGHT_ON_TIME_MS in the PIC's
+// main.c; a repeat ON restarts it); EINK_LIGHT_OFF turns it off early.
 #define I2C_COMMAND_EINK_LIGHT_ON 0x01
 #define I2C_COMMAND_EINK_LIGHT_OFF 0x02
 #define I2C_COMMAND_PDLC_ON 0x03
 #define I2C_COMMAND_PDLC_OFF 0x04
 #define I2C_COMMAND_PULSE_MOOMIN 0x05
-
-#define SCREEN_LIGHT_TIME 4000
 
 // Wiring between the Feather ESP32C6 and the DESPI-C02 adapter board carrying
 // the GDEY029T94-FL03 (SSD1680) e-paper panel.

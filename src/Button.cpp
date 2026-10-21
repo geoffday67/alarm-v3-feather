@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "Constants.h"
+#include "Display.h"
 #include "Music.h"
 #include "Sleep.h"
 #include "Utils.h"
@@ -20,13 +21,12 @@ void topSwitchTask(void* pparams) {
   while (1) {
     Utils::waitFor(bit);
 
-    // TESTING: toggle the music instead of the front light. Restore with
-    // Display::showFrontLight() and #include "Display.h".
-    if (Music::isPlaying()) {
-      Music::stop();
-    } else {
-      Music::play();
-    }
+    Display::showFrontLight();
+    // if (Music::isPlaying()) {
+    //   Music::stop();
+    // } else {
+    //   Music::play();
+    // }
 
     // Release debounce. The interrupt has been disabled since the ISR ran, so
     // none of the press bounce gets through. The button counts as released

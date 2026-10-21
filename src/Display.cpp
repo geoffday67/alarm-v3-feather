@@ -8,6 +8,7 @@
 #include "Display_EPD_W21_spi.h"
 #include "Constants.h"
 #include "Fonts/ArialBold50pt.h"
+#include "I2CBus.h"
 #include "Sleep.h"
 #include "driver/gpio.h"
 #include "Moomin.h"
@@ -224,18 +225,15 @@ void Display::showTime(time_t utc) {
 }
 
 void Display::showFrontLight() {
-  // Light on, wait, light off. The PIC only fades between the two levels; the
-  // on time is timed here. Holds a Sleep inhibit so the chip can't go into
-  // deep sleep with the light left on. Blocks the caller for
-  // SCREEN_LIGHT_TIME, but with vTaskDelay(), so other tasks keep running.
+  // Light on. The PIC fades it in and turns it off itself after its own
+  // on-time, so nothing is timed here and the chip can deep sleep with the
+  // light still on. The Sleep inhibit only covers the I2C transaction.
   Sleep::inhibit();
 
   // TESTING
-  Moomin::pulse();
+  // Moomin::pulse();
 
-  // I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
-  // vTaskDelay(pdMS_TO_TICKS(SCREEN_LIGHT_TIME));
-  // I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_OFF, "light off");
+  I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
 
   Sleep::release();
 }
