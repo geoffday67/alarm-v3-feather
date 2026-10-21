@@ -1,5 +1,6 @@
 #pragma once
-#include <Wire.h>
+
+#include <stdint.h>
 
 // PCF8563 7-bit I2C address
 #define PCF8563_ADDR          0x51

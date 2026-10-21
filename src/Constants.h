@@ -5,9 +5,10 @@
 
 #define RTC_INTERRUPT_PIN 7
 
-#define I2S_LRC 14
+#define I2S_ENABLE 15
+#define I2S_DIN 14
 #define I2S_BLCK 0
-#define I2S_DIN 8
+#define I2S_LRC 8
 
 // I2C bus to the PIC16F15225 client (default Feather ESP32-C6 SCL/SDA pins).
 #define I2C_SCL_PIN 18

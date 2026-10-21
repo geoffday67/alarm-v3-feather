@@ -1027,7 +1027,7 @@
       <id>3f4b0dbb-f67d-4a78-95ae-0ff8ec03c341</id>
       <name>LAB10</name>
       <point x="3.1" y="1.3"/>
-      <text>Vin&lt;br&gt;Gnd&lt;br&gt;SD&lt;br&gt;Gain&lt;br&gt;I2S&lt;br&gt;I2S&lt;br&gt;I2S</text>
+      <text>Vin&lt;br&gt;Gnd&lt;br&gt;SD&lt;br&gt;Gain&lt;br&gt;I2S (DIN)&lt;br&gt;I2S (BCLK)&lt;br&gt;I2S (LRC)</text>
       <font name="Dialog" size="16" style="0"/>
       <color hex="333333"/>
       <horizontalAlignment>LEFT</horizontalAlignment>
@@ -1432,7 +1432,7 @@
       <mode>TwoPoints</mode>
     </diylc.shapes.Ellipse>
     <diylc.shapes.Ellipse>
-      <id>8d0357fb-6c97-46a3-93ab-9720e00fb295</id>
+      <id>cb8b056c-26e4-42f8-b73f-286ad7b60fc2</id>
       <name>ELL3</name>
       <alphaPercent>
         <value>100</value>
@@ -1450,7 +1450,7 @@
       <mode>TwoPoints</mode>
     </diylc.shapes.Ellipse>
     <diylc.shapes.Ellipse>
-      <id>8d0357fb-6c97-46a3-93ab-9720e00fb295</id>
+      <id>20e816ee-4179-415f-bd1f-5c24a5618419</id>
       <name>ELL4</name>
       <alphaPercent>
         <value>100</value>
@@ -1490,7 +1490,7 @@
       <orientation>DEFAULT</orientation>
     </diylc.misc.Label>
     <diylc.misc.Label>
-      <id>a5d93ca5-7f86-4e09-826f-98ec99d02a5b</id>
+      <id>b5236ffe-d766-4b57-ad24-7542f673b731</id>
       <name>LAB15</name>
       <point x="3.4" y="2.5"/>
       <text>ICSPDAT</text>

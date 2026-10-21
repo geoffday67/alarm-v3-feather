@@ -1,10 +1,5 @@
-#include <Adafruit_GFX.h>
 #include <Arduino.h>
-#include <BackgroundAudio.h>
-#include <ESP32PDMAudio.h>
-#include <SPI.h>
-#include <Wire.h>
-#include <rotary.h>
+#include <LittleFS.h>
 
 #include "Alarm.h"
 #include "Button.h"
@@ -14,26 +9,17 @@
 #include "Display_EPD_W21.h"
 #include "Display_EPD_W21_spi.h"
 #include "EventManager.h"
-#include "LittleFS.h"
+#include "I2CBus.h"
+#include "Music.h"
 #include "Sleep.h"
 #include "Utils.h"
-#include "WiFi.h"
 #include "Wireless.h"
-#include "I2CBus.h"
-#include "driver/gpio.h"
-#include "driver/rtc_io.h"
 #include "esp_partition.h"
 #include "esp_sleep.h"
-#include "soc/lp_io_struct.h"
-#include "soc/lpperi_struct.h"
 
 #if INCLUDE_vTaskSuspend != 1
 #error "INCLUDE_vTaskSuspend is not 1 -- portMAX_DELAY will NOT block indefinitely"
 #endif
-
-// ESP32PDMAudio audio(0);  // single PDM output
-ESP32I2SAudio audio(I2S_BLCK, I2S_LRC, I2S_DIN);
-BackgroundAudioMP3 mp3(audio);
 
 // Same as startPartialUpdate() in Display.cpp, but targets an arbitrary sub-window
 // instead of the whole frame, mirroring EPD_Dis_Part()'s window setup.
@@ -136,9 +122,6 @@ void showDiagnostics() {
   }
 }
 
-File audioFile;
-uint8_t fileBuf[512];
-
 // Cold boot only (power-on, reset, reflash). Runs after Display::init(),
 // which powerOnInit() needs, but before Clock::init() and TopButton::init():
 // the clock task mustn't do a partial refresh before Display::powerOnInit()
@@ -210,7 +193,12 @@ void setup() {
     powerOnInit();
   }
 
-  // Every boot: set up each module's tasks and interrupts.
+  // Every boot: set up each module's tasks and interrupts. Music first: the
+  // clock and button tasks may call it as soon as their interrupts are
+  // attached (e.g. the press that woke us).
+  Music::init();
+  Serial.println("Music initialised");
+
   Clock::init();
   Serial.println("Clock initialised");
 
@@ -245,17 +233,6 @@ void setup() {
   Serial.println("LittleFS initialised");
 
   showDiagnostics();
-
-  audioFile = LittleFS.open("/xmorning.mp3");
-  if (!audioFile) {
-    Serial.println("Failed to open mp3");
-    return;
-  }
-  Serial.println("Playing mp3");
-
-  mp3.begin();
-  mp3.setGain(0.25);
-  Serial.println("MP3 initialised");
 }
 
 void loop() {
@@ -292,18 +269,6 @@ void loop() {
   //   Serial.printf("Alarm set to %02u:%02u\n", alarmHour, alarmMinute);
   // }
   // delay(1000);
-
-  while (audioFile && mp3.availableForWrite() > (int)sizeof(fileBuf)) {
-    int len = audioFile.read(fileBuf, sizeof(fileBuf));
-    if (len > 0) {
-      mp3.write(fileBuf, len);
-    }
-    if (len < (int)sizeof(fileBuf)) {
-      audioFile.close();
-      mp3.end();
-      Serial.println("Playback complete");
-    }
-  }
 
   EventManager.processEvents();
 }

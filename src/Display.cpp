@@ -8,7 +8,6 @@
 #include "Display_EPD_W21_spi.h"
 #include "Constants.h"
 #include "Fonts/ArialBold50pt.h"
-#include "I2CBus.h"
 #include "Sleep.h"
 #include "driver/gpio.h"
 #include "Moomin.h"

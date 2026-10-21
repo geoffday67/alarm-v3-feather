@@ -1,5 +1,7 @@
 #include "pcf8563_timer.h"
 
+#include <Wire.h>
+
 #include "../I2CBus.h"
 
 void pcf8563WriteReg(uint8_t reg, uint8_t value) {
