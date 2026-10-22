@@ -43,7 +43,7 @@ bool pcf8563IsPresent() {
   return ok;
 }
 
-bool pcf8563Configure(uint8_t periodSeconds) {
+bool pcf8563Configure() {
   if (!pcf8563IsPresent()) {
     return false;
   }
@@ -59,12 +59,81 @@ bool pcf8563Configure(uint8_t periodSeconds) {
   // CLKOUT off: FE = 0. FD[1:0] are don't-care once FE is clear.
   pcf8563WriteReg(PCF8563_REG_CLKOUT, 0x00);
 
-  pcf8563ConfigureMinuteInterrupt(periodSeconds);
-
   return true;
 }
 
-void pcf8563ConfigureMinuteInterrupt(uint8_t periodSeconds) {
+static uint8_t toBCD(uint8_t value) {
+  return ((value / 10) << 4) | (value % 10);
+}
+
+static uint8_t fromBCD(uint8_t bcd) {
+  return ((bcd >> 4) * 10) + (bcd & 0x0F);
+}
+
+// Control_status_2 bits 7:5 must always be written as 0 (Table 6).
+static constexpr uint8_t CTRL2_WRITABLE = 0x1F;
+
+// Sets AE in all four alarm registers so none takes part in the match.
+static void disableAlarmMatches() {
+  pcf8563WriteReg(PCF8563_REG_MIN_ALARM, PCF8563_BIT_AE);
+  pcf8563WriteReg(PCF8563_REG_HOUR_ALARM, PCF8563_BIT_AE);
+  pcf8563WriteReg(PCF8563_REG_DAY_ALARM, PCF8563_BIT_AE);
+  pcf8563WriteReg(PCF8563_REG_WEEKDAY_ALARM, PCF8563_BIT_AE);
+}
+
+void pcf8563StartMinuteAlarmInterrupt() {
+  // Timer off. TD = 1/60 Hz is the datasheet's power-saving setting for an
+  // unused timer (Table 23, note 2).
+  pcf8563WriteReg(PCF8563_REG_TMR_CTRL, PCF8563_TD_1_60HZ);
+
+  // Only the minute field takes part in the match (armed below).
+  disableAlarmMatches();
+
+  // Control_status_2:
+  //   TI_TP = 0  -> timer pulse mode off (irrelevant with TIE = 0)
+  //   AF    = 0  -> clear any stale alarm flag
+  //   TF    = 0  -> clear any stale timer flag
+  //   AIE   = 1  -> INT follows AF (level, see Table 6 remark)
+  //   TIE   = 0  -> timer interrupt unused
+  pcf8563WriteReg(PCF8563_REG_CTRL2, PCF8563_BIT_AIE);
+
+  // Armed after AF is cleared: an alarm firing from here on is a real
+  // minute rollover and is kept.
+  pcf8563ArmMinuteAlarm();
+}
+
+void pcf8563ArmMinuteAlarm() {
+  uint8_t minute = fromBCD(pcf8563ReadReg(PCF8563_REG_MINUTES) & 0x7F);
+  while (true) {
+    // AE_M = 0 (bit 7 clear) enables the minute match.
+    pcf8563WriteReg(PCF8563_REG_MIN_ALARM, toBCD((minute + 1) % 60));
+
+    // If the minute changed between the read and the write, the alarm may
+    // now equal the current minute and wouldn't fire for an hour. Set it
+    // again from the new minute. (If the rollover came after the write,
+    // AF has been set for it and the next tick is already pending; moving
+    // the alarm on is still correct.)
+    uint8_t now = fromBCD(pcf8563ReadReg(PCF8563_REG_MINUTES) & 0x7F);
+    if (now == minute) {
+      return;
+    }
+    minute = now;
+  }
+}
+
+void pcf8563ClearAlarmFlag() {
+  uint8_t ctrl2 = pcf8563ReadReg(PCF8563_REG_CTRL2);
+
+  // Writing 0 to a flag bit clears it, writing 1 leaves it unchanged
+  // (Table 6). Clear AF, keep TF, preserve TI_TP/AIE/TIE.
+  ctrl2 = ((ctrl2 & ~PCF8563_BIT_AF) | PCF8563_BIT_TF) & CTRL2_WRITABLE;
+  pcf8563WriteReg(PCF8563_REG_CTRL2, ctrl2);
+}
+
+void pcf8563StartTimerInterrupt(uint8_t periodSeconds) {
+  // No alarm match, so AF can't be set again once cleared below.
+  disableAlarmMatches();
+
   // Disable the timer while it's being reconfigured
   pcf8563WriteReg(PCF8563_REG_TMR_CTRL, 0x00);
 
@@ -76,29 +145,20 @@ void pcf8563ConfigureMinuteInterrupt(uint8_t periodSeconds) {
 
   // Control_status_2:
   //   TI_TP = 0  -> INT level-active, tracks TF (needed for GPIO level wakeup)
-  //   AF    = 1  -> leave alarm flag unchanged (write-1 = no-op per datasheet)
+  //   AF    = 0  -> clear any stale alarm flag
   //   TF    = 0  -> clear any stale timer flag
   //   AIE   = 0  -> alarm interrupt unused
   //   TIE   = 1  -> enable timer interrupt
-  pcf8563WriteReg(PCF8563_REG_CTRL2, PCF8563_BIT_AF | PCF8563_BIT_TIE);
+  pcf8563WriteReg(PCF8563_REG_CTRL2, PCF8563_BIT_TIE);
 }
 
 void pcf8563ClearTimerFlag() {
   uint8_t ctrl2 = pcf8563ReadReg(PCF8563_REG_CTRL2);
 
-  // Per datasheet: writing 0 to a flag bit clears it, writing 1 leaves
-  // it unchanged. Preserve AF (write 1) while clearing TF (write 0),
-  // and preserve TIE/AIE/TI_TP as currently set.
-  ctrl2 = (ctrl2 & ~PCF8563_BIT_TF) | PCF8563_BIT_AF;
+  // Writing 0 to a flag bit clears it, writing 1 leaves it unchanged
+  // (Table 6). Clear TF, keep AF, preserve TI_TP/AIE/TIE.
+  ctrl2 = ((ctrl2 & ~PCF8563_BIT_TF) | PCF8563_BIT_AF) & CTRL2_WRITABLE;
   pcf8563WriteReg(PCF8563_REG_CTRL2, ctrl2);
-}
-
-static uint8_t toBCD(uint8_t value) {
-  return ((value / 10) << 4) | (value % 10);
-}
-
-static uint8_t fromBCD(uint8_t bcd) {
-  return ((bcd >> 4) * 10) + (bcd & 0x0F);
 }
 
 bool pcf8563IsTimeValid() {

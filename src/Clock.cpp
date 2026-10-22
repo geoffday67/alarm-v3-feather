@@ -19,8 +19,13 @@ namespace {
 
 EventBits_t bit;
 
-// PCF8563 timer interrupt period: 60 s in normal use, 10 s while debugging.
-constexpr uint8_t TICK_PERIOD_S = 10;
+// What drives the clock tick (the PCF8563 INT that wakes the chip):
+//   true  - the minute alarm: once a minute at hh:mm:00, so the display and
+//           alarm check change on the minute. Normal use.
+//   false - the countdown timer: every TEST_TICK_PERIOD_S, free-running and
+//           not aligned to the minute. For testing.
+constexpr bool TICK_ON_THE_MINUTE = true;
+constexpr uint8_t TEST_TICK_PERIOD_S = 5;
 
 // NTP is done with a single UDP exchange rather than the IDF/lwIP SNTP client
 // (configTime()), which in the IDF defaults waits a random 0-5 s before its
@@ -217,9 +222,47 @@ bool queryNtp(int64_t& serverUs, int64_t& localUs, int64_t& roundTripUs) {
   return false;
 }
 
+// Starts whichever tick source TICK_ON_THE_MINUTE selects.
+void startTick() {
+  if (TICK_ON_THE_MINUTE) {
+    pcf8563StartMinuteAlarmInterrupt();
+  } else {
+    pcf8563StartTimerInterrupt(TEST_TICK_PERIOD_S);
+  }
+}
+
+// Clears the flag that asserted INT, which makes the pin high again. The
+// minute alarm is also moved on to the next minute.
+void acknowledgeTick() {
+  if (TICK_ON_THE_MINUTE) {
+    pcf8563ClearAlarmFlag();
+    pcf8563ArmMinuteAlarm();
+  } else {
+    pcf8563ClearTimerFlag();
+  }
+}
+
+// Call after the RTC time has been changed. The minute alarm was armed for
+// the minute after the old time, so it's re-armed from the new one. The
+// countdown timer doesn't depend on the time.
+void retimeTick() {
+  if (TICK_ON_THE_MINUTE) {
+    pcf8563ArmMinuteAlarm();
+  }
+}
+
 void clockTask(void* pparams) {
   while (1) {
     Utils::waitFor(bit);
+
+    // Acknowledged before the time is read: if the minute rolls over in
+    // between, the read gets the new minute (and the alarm has already been
+    // moved past it, or its AF is set and another tick follows), so the
+    // display is never left a minute behind.
+    acknowledgeTick();
+
+    // Enable the interrupt again as we've reset the interrupting pin.
+    enableInterrupt(RTC_INTERRUPT_PIN);
 
     // Read the time fresh from the RTC on every tick (nothing is carried
     // over between wakes).
@@ -228,12 +271,6 @@ void clockTask(void* pparams) {
     if (!utcValid) {
       Serial.println("RTC time not valid (VL set)");
     }
-
-    // Clear the timer flag, this makes the pin high again.
-    pcf8563ClearTimerFlag();
-
-    // Enable the interrupt again as we've reset the interrupting pin.
-    enableInterrupt(RTC_INTERRUPT_PIN);
 
     // Skipped while the RTC time can't be trusted, so a bad time is never
     // recorded as the last wake.
@@ -305,7 +342,8 @@ bool Clock::readUtc(time_t& utc) {
 }
 
 void Clock::powerOnInit() {
-  if (pcf8563Configure(TICK_PERIOD_S)) {
+  if (pcf8563Configure()) {
+    startTick();
     Serial.println("RTC module configured");
   } else {
     Serial.println("RTC MODULE NOT FOUND!!");
@@ -365,6 +403,8 @@ bool Clock::syncNetworkTime() {
                      utc.tm_wday,  // both 0 = Sunday
                      utc.tm_hour, utc.tm_min, utc.tm_sec);
   int64_t writeUs = esp_timer_get_time() - writeStart;
+
+  retimeTick();
 
   // Logged to check against RTC_WRITE_US.
   Serial.printf(

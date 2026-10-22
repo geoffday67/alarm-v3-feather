@@ -35,6 +35,12 @@
 #define PCF8563_REG_CENT_MONTHS  0x07
 #define PCF8563_REG_YEARS        0x08
 #define PCF8563_REG_MIN_ALARM    0x09
+#define PCF8563_REG_HOUR_ALARM   0x0A
+#define PCF8563_REG_DAY_ALARM    0x0B
+#define PCF8563_REG_WEEKDAY_ALARM 0x0C
+
+// Alarm registers (0x09-0x0C) bit 7 — Tables 18-21
+#define PCF8563_BIT_AE        (1 << 7)  // 1 = field ignored in the alarm match (power-on default)
 
 // Control_status_1 (0x00) bit positions — Table 5
 #define PCF8563_BIT_STOP      (1 << 5)
@@ -49,22 +55,48 @@
 //   1. Checks the RTC is present (pcf8563IsPresent); returns false if not.
 //   2. Clears STOP/TESTC in Control_status_1 if either is set.
 //   3. Disables CLKOUT (power-on default is 32.768 kHz, ~0.3 uA extra).
-//   4. Starts the periodic timer interrupt every periodSeconds (see
-//      pcf8563ConfigureMinuteInterrupt). This restarts the countdown and
-//      clears TF.
-// Does not check VL (call pcf8563IsTimeValid()) or set the time.
-bool pcf8563Configure(uint8_t periodSeconds);
+// Doesn't start a tick interrupt (pcf8563StartMinuteAlarmInterrupt() or
+// pcf8563StartTimerInterrupt()), check VL (pcf8563IsTimeValid()) or set the
+// time.
+bool pcf8563Configure();
 
-// Configures the timer to assert INT every periodSeconds (1 Hz source,
-// countdown = periodSeconds, 1-255; default 60 = once per minute). INT
-// is left in level mode (TI_TP = 0) so it stays asserted until
-// pcf8563ClearTimerFlag() is called — required for ESP32-C6 RTC GPIO
-// level-based deep-sleep wakeup.
-void pcf8563ConfigureMinuteInterrupt(uint8_t periodSeconds = 60);
+// ---- Tick interrupts ----
+// Two alternative sources for a periodic INT; each start function disables
+// the other. Either way INT is level-active (low) and stays asserted until
+// the flag that raised it is cleared, as ESP32-C6 LP GPIO deep-sleep wakeup
+// requires. Clear the flag after handling each tick, before going back to
+// sleep, or the wakeup fires again immediately.
 
-// Clears the timer flag (and therefore de-asserts INT). Call this
-// after handling the wakeup, before going back to sleep, or the
-// level-triggered GPIO wakeup will fire again immediately.
+// Asserts INT at the start of every minute (hh:mm:00) using the minute
+// alarm. AF is set only when the minutes counter increments to match
+// Minute_alarm (datasheet 8.6.5), so the tick is aligned with the minute
+// rollover; the countdown timer's source clocks have no documented phase
+// relationship to the time counters, so the timer can't guarantee this.
+// The alarm matches one minute value, so it must be moved on every tick:
+// pcf8563ClearAlarmFlag() then pcf8563ArmMinuteAlarm(). Hour, day and
+// weekday alarms are disabled and the countdown timer is stopped. Clears
+// AF and TF.
+void pcf8563StartMinuteAlarmInterrupt();
+
+// Sets Minute_alarm to the minute after the current one. Doesn't touch AF.
+// If the minute rolls over during the update the alarm is set again from
+// the new minute: an alarm left equal to the current minute would wait an
+// hour, since it only fires on an increment to a match. Call after each
+// pcf8563ClearAlarmFlag(), and after pcf8563SetDateTime().
+void pcf8563ArmMinuteAlarm();
+
+// Clears the alarm flag (de-asserting INT in minute-alarm mode), leaving TF
+// unchanged.
+void pcf8563ClearAlarmFlag();
+
+// Asserts INT every periodSeconds (1-255) from the countdown timer (1 Hz
+// source, autoreloading). Free-running from when this is called, so not
+// aligned to the minute: intended for testing. All alarm matches are
+// disabled. Clears AF and TF.
+void pcf8563StartTimerInterrupt(uint8_t periodSeconds);
+
+// Clears the timer flag (de-asserting INT in timer mode), leaving AF
+// unchanged.
 void pcf8563ClearTimerFlag();
 
 // Low-level register access, exposed in case other code needs it

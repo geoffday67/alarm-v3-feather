@@ -14,8 +14,9 @@ namespace Clock {
 void init();
 
 // Call once on a cold boot (power-on, reset, reflash), before init().
-// Configures the PCF8563: CLKOUT off and the periodic timer interrupt
-// started, which also clears any pending tick. Doesn't set the time - see
+// Configures the PCF8563: CLKOUT off and the tick interrupt started (on the
+// minute, or every few seconds for testing - TICK_ON_THE_MINUTE in
+// Clock.cpp), which also clears any pending tick. Doesn't set the time - see
 // syncNetworkTime().
 void powerOnInit();
 
@@ -35,9 +36,10 @@ uint64_t prepareForSleep();
 bool readUtc(time_t& utc);
 
 // Gets UTC from NTP (direct UDP request, not the SNTP client) and writes it
-// to the PCF8563, which also clears its VL flag. WiFi must already be
-// connected. Blocks for up to about 5 s waiting for a reply (three requests
-// 1 s apart, then 3 s), plus up to 1 s to align the RTC write to the second.
+// to the PCF8563, which also clears its VL flag, then re-arms the minute
+// tick from the new time. WiFi must already be connected. Blocks for up to
+// about 5 s waiting for a reply (three requests 1 s apart, then 3 s), plus up
+// to 1 s to align the RTC write to the second.
 // Returns false if no valid reply arrived (RTC left unchanged).
 bool syncNetworkTime();
 }
