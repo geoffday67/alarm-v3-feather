@@ -2,6 +2,7 @@
 #include <LittleFS.h>
 
 #include "Alarm.h"
+#include "Battery.h"
 #include "Button.h"
 #include "Clock.h"
 #include "Constants.h"
@@ -134,6 +135,9 @@ void powerOnInit() {
   Clock::powerOnInit();
   Serial.println("Clock power-on initialised");
 
+  Battery::powerOnInit();
+  Serial.println("Battery power-on initialised");
+
   TopButton::powerOnInit();
   Serial.println("Top button power-on initialised");
 
@@ -147,7 +151,7 @@ void powerOnInit() {
   if (!Clock::readUtc(utc)) {
     Serial.println("RTC time not valid (VL set)");
   }
-  Display::showTime(utc);
+  Display::showTime(utc, Battery::isLow());
 }
 
 void setup() {
@@ -177,6 +181,9 @@ void setup() {
   // both use the panel.
   Display::init();
   Serial.println("Display initialised");
+
+  Battery::init();
+  Serial.println("Battery initialised");
 
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
     // Woken by one (or both) of the external pins. Logged only; each
@@ -221,6 +228,7 @@ void setup() {
   uint64_t wakeMask = 0;
   wakeMask |= Display::prepareForSleep();
   wakeMask |= Clock::prepareForSleep();
+  wakeMask |= Battery::prepareForSleep();
   wakeMask |= TopButton::prepareForSleep();
   esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
 

@@ -7,11 +7,15 @@
 #include "Display_EPD_W21.h"
 #include "Display_EPD_W21_spi.h"
 #include "Constants.h"
+#include <Fonts/FreeSansBold12pt7b.h>
+
 #include "Fonts/ArialBold50pt.h"
 #include "I2CBus.h"
 #include "Sleep.h"
 #include "driver/gpio.h"
 #include "Moomin.h"
+#include "Alarm.h"
+#include "Battery.h"
 
 namespace {
 
@@ -38,6 +42,16 @@ GFXcanvas1 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 // font's digits all have the same advance (38 px) so every time lands in
 // exactly the same spot.
 int textCursorX, textCursorY;
+
+// Alignment border drawn at the very edge of the display area.
+constexpr int BORDER_PX = 5;
+
+// Low-battery message, centred in the clear band between the time's digits
+// (bottom edge y = 88) and the border. 222 x 18 px in this font; all caps,
+// so no descenders.
+const char* const LOW_BATTERY_TEXT = "CHARGE BATTERY";
+constexpr int LOW_BATTERY_BAND_TOP = 89;
+constexpr int LOW_BATTERY_BAND_BOTTOM = SCREEN_HEIGHT - BORDER_PX;  // exclusive
 
 // Maps logical landscape (x,y) coordinates to the panel's native portrait
 // buffer according to EPD_FLIP_H/EPD_ROTATION.
@@ -87,16 +101,39 @@ void computeLayout(const char* referenceText) {
   textCursorY = (SCREEN_HEIGHT - h) / 2 - y1;
 }
 
-// Renders text at the fixed cursor into the whole native buffer.
-void renderTextToBuffer(const char* text) {
+// Clears the canvas to white apart from the alignment border.
+void clearCanvas() {
   canvas.fillScreen(0);
-  // 5px border at the very edge of the display area, for mount alignment.
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < BORDER_PX; i++) {
     canvas.drawRect(i, i, SCREEN_WIDTH - 2 * i, SCREEN_HEIGHT - 2 * i, 1);
   }
+}
+
+// Draws text at the fixed time cursor.
+void drawTime(const char* text) {
+  canvas.setFont(&ArialBold50pt);
+  canvas.setTextSize(1);
+  canvas.setTextColor(1);
   canvas.setCursor(textCursorX, textCursorY);
   canvas.print(text);
+}
 
+// Draws the low-battery message.
+void drawLowBattery() {
+  canvas.setFont(&FreeSansBold12pt7b);
+  canvas.setTextSize(1);
+  canvas.setTextColor(1);
+
+  int16_t x1, y1;
+  uint16_t w, h;
+  canvas.getTextBounds(LOW_BATTERY_TEXT, 0, 0, &x1, &y1, &w, &h);
+  int bandHeight = LOW_BATTERY_BAND_BOTTOM - LOW_BATTERY_BAND_TOP;
+  canvas.setCursor((SCREEN_WIDTH - w) / 2 - x1, LOW_BATTERY_BAND_TOP + (bandHeight - h) / 2 - y1);
+  canvas.print(LOW_BATTERY_TEXT);
+}
+
+// Copies the canvas into the native panel buffer.
+void copyCanvasToBuffer() {
   for (int y = 0; y < SCREEN_HEIGHT; y++) {
     for (int x = 0; x < SCREEN_WIDTH; x++) {
       epdSetPixel(epdBuffer, x, y, canvas.getPixel(x, y));
@@ -188,7 +225,8 @@ uint64_t Display::prepareForSleep() {
 
 void Display::powerOnInit() {
   // Blank screen apart from the alignment border.
-  renderTextToBuffer("");
+  clearCanvas();
+  copyCanvasToBuffer();
 
   EPD_HW_Init();
   // Seeds both RAM planes with the current image; required once before
@@ -199,7 +237,7 @@ void Display::powerOnInit() {
   EPD_DeepSleep();
 }
 
-void Display::showTime(time_t utc) {
+void Display::showTime(time_t utc, bool lowBattery) {
   struct tm local;
   localtime_r(&utc, &local);
 
@@ -208,7 +246,12 @@ void Display::showTime(time_t utc) {
 
   Sleep::inhibit();
 
-  renderTextToBuffer(text);
+  clearCanvas();
+  drawTime(text);
+  if (lowBattery) {
+    drawLowBattery();
+  }
+  copyCanvasToBuffer();
 
   startPartialUpdate(epdBuffer);
   if (!waitWhileBusy()) {
@@ -233,7 +276,13 @@ void Display::showFrontLight() {
   // TESTING
   // Moomin::pulse();
 
-  I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
+  // uint8_t hour, minute;
+  // Alarm::readSetTime(hour, minute);
+  // Serial.printf("Alarm set to %02d:%02d\n", hour, minute);
+
+  Serial.printf("Battery is %04d mV\n", Battery::readMillivolts());
+
+  // I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
 
   Sleep::release();
 }

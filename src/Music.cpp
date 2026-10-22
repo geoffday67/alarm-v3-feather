@@ -20,7 +20,7 @@ constexpr const char* MUSIC_FILE = "/morning.mp3";
 // 3.59 Vrms x GAIN (MAX98357 at its default 9 dB: 2.1 dBV + 9 dB), so 0.2
 // gives 0.72 Vrms, 0.13 W into 4 ohms. The amp reaches 1% THD+N at about
 // 1.3 W into 4 ohms at 3.7 V (datasheet), i.e. GAIN about 0.64.
-constexpr float GAIN = 0.3f;
+constexpr float GAIN = 0.2f;
 
 // How often the music task tops up the decoder's 8 KB input buffer and checks
 // for stop(). 8 KB lasts about 200 ms even at 320 kbit/s.

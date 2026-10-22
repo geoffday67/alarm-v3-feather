@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 
-// Serialises access to the shared I2C bus (PCF8563, PIC16F15225 and, later,
-// the battery monitor) between tasks.
+// Serialises access to the shared I2C bus (PCF8563, PIC16F15225 and the
+// MAX17048 battery gauge) between tasks.
 //
 // TwoWire already holds its own mutex from beginTransmission() until
 // endTransmission(true), or until requestFrom() returns after a repeated
@@ -16,10 +16,14 @@
 // Not recursive: don't take a Guard while already holding one in the same
 // task. Never use from an ISR.
 //
-// TODO: revisit locking when adding (1) battery status reads and (2) periodic
-// RTC updates from SNTP while other tasks are running. pcf8563SetDateTime()
-// locks per register write, so another task's transaction can land inside
-// its STOP-to-release timing.
+// Battery gauge reads need nothing more: each register is one self-contained
+// transaction under its own Guard, and no two registers have to be read
+// atomically together. They're made from the clock task (and from setup()
+// before the tasks start), sequentially with its RTC accesses.
+//
+// TODO: revisit locking when adding periodic RTC updates from SNTP while
+// other tasks are running. pcf8563SetDateTime() locks per register write, so
+// another task's transaction can land inside its STOP-to-release timing.
 namespace I2CBus {
 // Creates the mutex and starts the bus. Call once per boot, before any task
 // that uses the bus is started.

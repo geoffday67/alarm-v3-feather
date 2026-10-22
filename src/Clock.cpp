@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "Alarm.h"
+#include "Battery.h"
 #include "Constants.h"
 #include "Display.h"
 #include "Sleep.h"
@@ -241,11 +242,14 @@ void clockTask(void* pparams) {
       // TODO: sound the alarm.
     }
 
+    // Battery voltage is checked on the same tick as the time.
+    bool lowBattery = Battery::isLow();
+
     // Blocks this task until the panel has finished (~0.3 s). Display holds
     // its own sleep inhibit, so this would be safe even outside the one
     // taken in clockHandler(). A tick arriving meanwhile is handled on the
     // next loop.
-    Display::showTime(utc);
+    Display::showTime(utc, lowBattery);
 
     // Done. Released after re-enabling: if INT is still (or again) low the
     // ISR fires and re-inhibits. Even if the sleeping task got in first,

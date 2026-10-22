@@ -34,16 +34,17 @@ void powerOnInit();
 uint64_t prepareForSleep();
 
 // Converts utc to local time (using the TZ set in setup()), renders it as
-// "HH:MM:SS" and refreshes the panel, then puts the panel into its
-// own deep sleep. Holds a Sleep inhibit for the duration, so the chip can't
-// go into deep sleep mid-update.
+// "HH:MM:SS", plus a low-battery message below it if lowBattery is set,
+// and refreshes the panel, then puts the panel into its own deep sleep.
+// Holds a Sleep inhibit for the duration, so the chip can't go into deep
+// sleep mid-update.
 //
 // Always a fast partial refresh. Relies on the init and RAM contents left by
 // powerOnInit() or the previous update, which survive the ESP32's deep sleep
 // because the panel is left in its RAM-retaining deep sleep (see
 // prepareForSleep()). Blocks the caller until the panel finishes, but polls
 // BUSY with vTaskDelay(), so other tasks keep running.
-void showTime(time_t utc);
+void showTime(time_t utc, bool lowBattery);
 
 // Turns the eInk front light on. The PIC turns it off itself after its own
 // on-time, so this returns as soon as the command is sent.
