@@ -9,6 +9,7 @@
 #include "Constants.h"
 #include "Display.h"
 #include "Sleep.h"
+#include "TimeSync.h"
 #include "Utils.h"
 #include "driver/rtc_io.h"
 #include "esp_random.h"
@@ -287,6 +288,20 @@ void clockTask(void* pparams) {
     // taken in clockHandler(). A tick arriving meanwhile is handled on the
     // next loop.
     Display::showTime(utc, lowBattery);
+    TimeSync::logLastSync();
+
+    // Daily NTP sync (retried on the next few ticks after a failure). After the display
+    // and alarm check so WiFi never delays them, still under this tick's
+    // Sleep inhibit, and on this task so the RTC write and tick re-arm can't
+    // interleave with acknowledgeTick().
+    if (TimeSync::syncIfDue(utc) && !utcValid) {
+      // The time just shown couldn't be trusted; show the corrected one now
+      // rather than at the next tick.
+      if (Clock::readUtc(utc)) {
+        Display::showTime(utc, lowBattery);
+        TimeSync::logLastSync();
+      }
+    }
 
     // Done. Released after re-enabling: if INT is still (or again) low the
     // ISR fires and re-inhibits. Even if the sleeping task got in first,

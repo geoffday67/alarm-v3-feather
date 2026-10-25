@@ -121,6 +121,8 @@ bool pcf8563IsTimeValid();
 // STOP-bit sequence so the multi-byte write can't be corrupted by a
 // rollover mid-write. Call this once at first boot, whenever
 // pcf8563IsTimeValid() returns false, and after each NTP resync.
+// Holds the I2C bus lock for the whole sequence, so don't call it while
+// holding an I2CBus::Guard.
 // weekday: 0 = Sunday ... 6 = Saturday. year: 0-99 (2000-2099).
 void pcf8563SetDateTime(uint8_t year, uint8_t month, uint8_t day,
                          uint8_t weekday, uint8_t hour, uint8_t minute,

@@ -4,12 +4,17 @@
 
 #include "../I2CBus.h"
 
-void pcf8563WriteReg(uint8_t reg, uint8_t value) {
-  I2CBus::Guard bus;
+// Single register write. The caller must hold an I2CBus::Guard.
+static void writeRegUnlocked(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(PCF8563_ADDR);
   Wire.write(reg);
   Wire.write(value);
   Wire.endTransmission();
+}
+
+void pcf8563WriteReg(uint8_t reg, uint8_t value) {
+  I2CBus::Guard bus;
+  writeRegUnlocked(reg, value);
 }
 
 uint8_t pcf8563ReadReg(uint8_t reg) {
@@ -169,24 +174,29 @@ bool pcf8563IsTimeValid() {
 void pcf8563SetDateTime(uint8_t year, uint8_t month, uint8_t day,
                          uint8_t weekday, uint8_t hour, uint8_t minute,
                          uint8_t second) {
+  // One Guard for the whole sequence, so no other task's transaction (e.g.
+  // a PIC command from the button task) can land between STOP and its
+  // release and shift the release point the caller timed.
+  I2CBus::Guard bus;
+
   // Freeze the prescaler before writing multi-byte time registers
   // (datasheet Section 8.10). Writing STOP alone also clears TESTC
   // (reset value 1); 0 is the datasheet's value for normal operation.
-  pcf8563WriteReg(PCF8563_REG_CTRL1, PCF8563_BIT_STOP);
+  writeRegUnlocked(PCF8563_REG_CTRL1, PCF8563_BIT_STOP);
 
   // VL_seconds: bit 7 = 0 clears VL, remaining bits are BCD seconds
-  pcf8563WriteReg(PCF8563_REG_VL_SECONDS, toBCD(second) & 0x7F);
-  pcf8563WriteReg(PCF8563_REG_MINUTES, toBCD(minute));
-  pcf8563WriteReg(PCF8563_REG_HOURS, toBCD(hour));
-  pcf8563WriteReg(PCF8563_REG_DAYS, toBCD(day));
-  pcf8563WriteReg(PCF8563_REG_WEEKDAYS, weekday & 0x07);
-  pcf8563WriteReg(PCF8563_REG_CENT_MONTHS, toBCD(month));  // C bit = 0
-  pcf8563WriteReg(PCF8563_REG_YEARS, toBCD(year));
+  writeRegUnlocked(PCF8563_REG_VL_SECONDS, toBCD(second) & 0x7F);
+  writeRegUnlocked(PCF8563_REG_MINUTES, toBCD(minute));
+  writeRegUnlocked(PCF8563_REG_HOURS, toBCD(hour));
+  writeRegUnlocked(PCF8563_REG_DAYS, toBCD(day));
+  writeRegUnlocked(PCF8563_REG_WEEKDAYS, weekday & 0x07);
+  writeRegUnlocked(PCF8563_REG_CENT_MONTHS, toBCD(month));  // C bit = 0
+  writeRegUnlocked(PCF8563_REG_YEARS, toBCD(year));
 
   // Release STOP. Per datasheet, the first 1 Hz tick after this point
   // occurs 0.507813-0.507935 s later, and I2C timing accuracy adds up
   // to one 8.192 kHz cycle (~122 us) of uncertainty on top of that.
-  pcf8563WriteReg(PCF8563_REG_CTRL1, 0x00);
+  writeRegUnlocked(PCF8563_REG_CTRL1, 0x00);
 }
 
 bool pcf8563ReadDateTime(uint8_t &year, uint8_t &month, uint8_t &day,

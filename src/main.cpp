@@ -13,8 +13,8 @@
 #include "I2CBus.h"
 #include "Music.h"
 #include "Sleep.h"
+#include "TimeSync.h"
 #include "Utils.h"
-#include "Wireless.h"
 #include "esp_partition.h"
 #include "esp_sleep.h"
 
@@ -141,17 +141,16 @@ void powerOnInit() {
   TopButton::powerOnInit();
   Serial.println("Top button power-on initialised");
 
-  // Connect WiFi and get the time via NTP.
-  if (Wireless::connectWiFi()) {
-    Clock::syncNetworkTime();
-  }
-  Wireless::disconnectWiFi();
+  // After Clock::powerOnInit(): the sync re-arms the RTC tick.
+  TimeSync::powerOnInit();
+  Serial.println("Time sync power-on initialised");
 
   time_t utc;
   if (!Clock::readUtc(utc)) {
     Serial.println("RTC time not valid (VL set)");
   }
   Display::showTime(utc, Battery::isLow());
+  TimeSync::logLastSync();
 }
 
 void setup() {
@@ -215,6 +214,9 @@ void setup() {
   Alarm::init();
   Serial.println("Alarm initialised");
 
+  TimeSync::init();
+  Serial.println("Time sync initialised");
+
   // Block until nothing is holding off sleep (e.g. the RTC tick that woke us
   // has been handled, TF cleared and the display updated).
   Sleep::waitUntilAllowed();
@@ -230,6 +232,7 @@ void setup() {
   wakeMask |= Clock::prepareForSleep();
   wakeMask |= Battery::prepareForSleep();
   wakeMask |= TopButton::prepareForSleep();
+  wakeMask |= TimeSync::prepareForSleep();
   esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
 
   esp_deep_sleep_start();

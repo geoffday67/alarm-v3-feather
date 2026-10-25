@@ -21,9 +21,11 @@
 // atomically together. They're made from the clock task (and from setup()
 // before the tasks start), sequentially with its RTC accesses.
 //
-// TODO: revisit locking when adding periodic RTC updates from SNTP while
-// other tasks are running. pcf8563SetDateTime() locks per register write, so
-// another task's transaction can land inside its STOP-to-release timing.
+// RTC accesses are all made from the clock task (and from setup() before
+// the tasks start), including the daily NTP resync, so they never interleave
+// with each other. pcf8563SetDateTime() holds one Guard across its whole
+// STOP-to-release sequence, so another task's transaction (e.g. a PIC
+// command) can't land inside its timing.
 namespace I2CBus {
 // Creates the mutex and starts the bus. Call once per boot, before any task
 // that uses the bus is started.

@@ -37,7 +37,8 @@ bool readUtc(time_t& utc);
 
 // Gets UTC from NTP (direct UDP request, not the SNTP client) and writes it
 // to the PCF8563, which also clears its VL flag, then re-arms the minute
-// tick from the new time. WiFi must already be connected. Blocks for up to
+// tick from the new time. WiFi must already be connected. Called only by
+// TimeSync, which owns the schedule and the WiFi connection. Blocks for up to
 // about 5 s waiting for a reply (three requests 1 s apart, then 3 s), plus up
 // to 1 s to align the RTC write to the second.
 // Returns false if no valid reply arrived (RTC left unchanged).
