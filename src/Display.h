@@ -19,7 +19,7 @@ void init();
 
 // Call once on a cold boot (power-on, reset, reflash), after init() and
 // before any showTime(). Full panel init and a full refresh to a blank
-// screen (alignment border only), which seeds both RAM planes so partial
+// screen, which seeds both RAM planes so partial
 // refreshes work from then on. Must also be repeated if the panel ever loses
 // power. Blocks the caller (~2 s), spinning on BUSY inside the vendor driver.
 void powerOnInit();

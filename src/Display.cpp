@@ -43,15 +43,12 @@ GFXcanvas1 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 // exactly the same spot.
 int textCursorX, textCursorY;
 
-// Alignment border drawn at the very edge of the display area.
-constexpr int BORDER_PX = 5;
-
 // Low-battery message, centred in the clear band between the time's digits
-// (bottom edge y = 88) and the border. 222 x 18 px in this font; all caps,
+// (bottom edge y = 88) and the bottom of the screen. 222 x 18 px in this font; all caps,
 // so no descenders.
 const char* const LOW_BATTERY_TEXT = "CHARGE BATTERY";
 constexpr int LOW_BATTERY_BAND_TOP = 89;
-constexpr int LOW_BATTERY_BAND_BOTTOM = SCREEN_HEIGHT - BORDER_PX;  // exclusive
+constexpr int LOW_BATTERY_BAND_BOTTOM = SCREEN_HEIGHT;  // exclusive
 
 // Maps logical landscape (x,y) coordinates to the panel's native portrait
 // buffer according to EPD_FLIP_H/EPD_ROTATION.
@@ -101,12 +98,9 @@ void computeLayout(const char* referenceText) {
   textCursorY = (SCREEN_HEIGHT - h) / 2 - y1;
 }
 
-// Clears the canvas to white apart from the alignment border.
+// Clears the canvas to white.
 void clearCanvas() {
   canvas.fillScreen(0);
-  for (int i = 0; i < BORDER_PX; i++) {
-    canvas.drawRect(i, i, SCREEN_WIDTH - 2 * i, SCREEN_HEIGHT - 2 * i, 1);
-  }
 }
 
 // Draws text at the fixed time cursor.
@@ -224,7 +218,7 @@ uint64_t Display::prepareForSleep() {
 }
 
 void Display::powerOnInit() {
-  // Blank screen apart from the alignment border.
+  // Blank screen.
   clearCanvas();
   copyCanvasToBuffer();
 
