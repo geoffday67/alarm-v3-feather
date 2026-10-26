@@ -46,6 +46,10 @@
 // flip) to appear correctly on the panel, 0 otherwise.
 #define EPD_FLIP_H 1
 
+// Every this many display updates is a full refresh instead of a partial
+// one, to clear the ghosting that builds up over partial refreshes.
+#define EPD_FULL_REFRESH_EVERY 10
+
 // Local time zone as a POSIX TZ string (applied with setenv/tzset). Europe/London:
 // GMT (UTC+0) in winter, BST (UTC+1) from the last Sunday in March at 01:00 GMT
 // to the last Sunday in October at 02:00 BST. Hard-coded until there's a

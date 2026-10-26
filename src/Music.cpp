@@ -55,6 +55,9 @@ EventBits_t stopBit;
 // True from play() until the music task has finished with the file.
 std::atomic<bool> active{false};
 
+// Set in Utils::mainEventGroup when playback ends (signalWhenFinished()).
+std::atomic<EventBits_t> finishedBits{0};
+
 bool mountFileSystem() {
   static bool mounted = false;
   if (!mounted) {
@@ -134,6 +137,13 @@ void musicTask(void* pparams) {
     // Cleared before the release, so a play() from here on takes a fresh
     // inhibit rather than being ignored.
     active = false;
+
+    // After active is cleared, so anyone woken sees isPlaying() false.
+    EventBits_t bits = finishedBits;
+    if (bits != 0) {
+      xEventGroupSetBits(Utils::mainEventGroup, bits);
+    }
+
     Sleep::release();
   }
 }
@@ -173,4 +183,8 @@ void Music::stop() {
 
 bool Music::isPlaying() {
   return active;
+}
+
+void Music::signalWhenFinished(EventBits_t bits) {
+  finishedBits.fetch_or(bits);
 }

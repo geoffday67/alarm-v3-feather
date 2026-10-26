@@ -21,7 +21,7 @@ void init();
 // before any showTime(). Full panel init and a full refresh to a blank
 // screen, which seeds both RAM planes so partial
 // refreshes work from then on. Must also be repeated if the panel ever loses
-// power. Blocks the caller (~2 s), spinning on BUSY inside the vendor driver.
+// power. Blocks the caller (~4.3 s), polling BUSY with vTaskDelay().
 void powerOnInit();
 
 // Drives the panel's interface inputs to fixed levels and holds them through
@@ -39,11 +39,14 @@ uint64_t prepareForSleep();
 // Holds a Sleep inhibit for the duration, so the chip can't go into deep
 // sleep mid-update.
 //
-// Always a fast partial refresh. Relies on the init and RAM contents left by
-// powerOnInit() or the previous update, which survive the ESP32's deep sleep
-// because the panel is left in its RAM-retaining deep sleep (see
-// prepareForSleep()). Blocks the caller until the panel finishes, but polls
-// BUSY with vTaskDelay(), so other tasks keep running.
+// Always drawn with a fast partial refresh (~0.6 s), which relies on the RAM
+// contents left by powerOnInit() or the previous update; these survive the
+// ESP32's deep sleep because the panel is left in its RAM-retaining deep
+// sleep (see prepareForSleep()). Every EPD_FULL_REFRESH_EVERY-th call
+// (Constants.h) first clears the panel to white with a full, flashing
+// refresh (~4.3 s), to clear ghosting; the count is kept in RTC memory
+// across deep sleep. Blocks the caller until the panel
+// finishes, but polls BUSY with vTaskDelay(), so other tasks keep running.
 void showTime(time_t utc, bool lowBattery);
 
 // Turns the eInk front light on. The PIC turns it off itself after its own

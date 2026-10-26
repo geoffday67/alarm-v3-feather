@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "AlarmSequence.h"
 #include "Constants.h"
 #include "Display.h"
 #include "Music.h"
@@ -21,7 +22,11 @@ void topSwitchTask(void* pparams) {
   while (1) {
     Utils::waitFor(bit);
 
-    Display::showFrontLight();
+    // While the alarm is going off, presses belong to it; otherwise a press
+    // turns the front light on.
+    if (!AlarmSequence::handlePress()) {
+      Display::showFrontLight();
+    }
     // if (Music::isPlaying()) {
     //   Music::stop();
     // } else {

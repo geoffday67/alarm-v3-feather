@@ -23,11 +23,20 @@ namespace {
 #define SCREEN_WIDTH EPD_HEIGHT
 #define SCREEN_HEIGHT EPD_WIDTH
 
-// How often to poll BUSY during a partial refresh, and how long to wait
-// before giving up. A partial refresh takes ~0.3 s; the timeout is only a
-// guard so a disconnected or faulty panel can't hold off deep sleep forever.
+// How often to poll BUSY during a refresh, and how long to wait before
+// giving up. Measured: partial ~0.57 s, full ~4.3 s (the spec's 0.3 s and
+// 2 s are at 25 C; the waveforms lengthen in the cold). The timeouts are
+// only a guard so a disconnected or faulty panel can't hold off deep sleep
+// forever.
 constexpr TickType_t BUSY_POLL_TICKS = pdMS_TO_TICKS(10);
-constexpr uint32_t BUSY_TIMEOUT_MS = 2000;
+constexpr uint32_t PARTIAL_BUSY_TIMEOUT_MS = 2000;
+constexpr uint32_t FULL_BUSY_TIMEOUT_MS = 10000;
+
+static_assert(EPD_FULL_REFRESH_EVERY >= 1, "EPD_FULL_REFRESH_EVERY must be at least 1");
+
+// Updates since the last full refresh. Survives deep sleep; reset by the
+// full refresh in powerOnInit() on every cold boot.
+RTC_DATA_ATTR uint32_t updatesSinceFullRefresh = 0;
 
 // Native 1-bit panel framebuffer (this panel has no usable grayscale mode -
 // the vendor's "4 gray" trick looks poor and can't be redrawn fast enough
@@ -155,16 +164,58 @@ void startPartialUpdate(const uint8_t* datas) {
   EPD_W21_WriteCMD(0x20);  // Activate Display Update Sequence
 }
 
+// Full panel init, then white written to both RAM planes (as
+// EPD_SetRAMValue_BaseMap() with a white image) and a full refresh
+// triggered, without the vendor driver's internal spin on BUSY during the
+// refresh; waitWhileBusy() does that wait instead. The init is needed every
+// time: each partial update resets the panel and only sets it up for a
+// partial refresh. EPD_HW_Init() still spins on BUSY itself, but only for the
+// few ms of its reset.
+//
+// Only ever white, so a periodic full refresh followed by a partial is the
+// same sequence as at power-on, and content is always drawn with a partial
+// refresh. (Black drawn by a full refresh faded to grey within ~0.5 s, but
+// that was seen on a panel later found to be damaged.)
+void startFullWhiteUpdate() {
+  EPD_HW_Init();
+
+  EPD_W21_WriteCMD(0x24);  // write B/W image to RAM
+  for (unsigned int i = 0; i < EPD_ARRAY; i++) {
+    EPD_W21_WriteDATA(0xFF);
+  }
+  EPD_W21_WriteCMD(0x26);  // write previous-image RAM
+  for (unsigned int i = 0; i < EPD_ARRAY; i++) {
+    EPD_W21_WriteDATA(0xFF);
+  }
+
+  EPD_W21_WriteCMD(0x22);  // Display Update Control
+  EPD_W21_WriteDATA(0xF7);
+  EPD_W21_WriteCMD(0x20);  // Activate Display Update Sequence
+}
+
 // Returns false on timeout.
-bool waitWhileBusy() {
+bool waitWhileBusy(uint32_t timeoutMs) {
   uint32_t start = millis();
   while (isEPD_W21_BUSY) {
-    if (millis() - start > BUSY_TIMEOUT_MS) {
+    if (millis() - start > timeoutMs) {
       return false;
     }
     vTaskDelay(BUSY_POLL_TICKS);
   }
   return true;
+}
+
+// Full refresh to a blank (white) screen, then the panel's RAM-retaining
+// deep sleep, as after every update. Leaves both RAM planes white, the
+// starting point partial refreshes need. Returns false on BUSY timeout.
+bool clearToWhite() {
+  startFullWhiteUpdate();
+  bool finished = waitWhileBusy(FULL_BUSY_TIMEOUT_MS);
+  if (!finished) {
+    Serial.println("eInk: BUSY timeout (full refresh)");
+  }
+  EPD_DeepSleep();
+  return finished;
 }
 
 }  // namespace
@@ -218,17 +269,10 @@ uint64_t Display::prepareForSleep() {
 }
 
 void Display::powerOnInit() {
-  // Blank screen.
-  clearCanvas();
-  copyCanvasToBuffer();
-
-  EPD_HW_Init();
-  // Seeds both RAM planes with the current image; required once before
-  // any partial refreshes, or partial updates drift/ghost against stale RAM.
-  EPD_SetRAMValue_BaseMap(epdBuffer);
-
-  // RAM-retaining deep sleep, as after every update (see showTime()).
-  EPD_DeepSleep();
+  // Seeds both RAM planes (white); required once before any partial
+  // refreshes, or partial updates drift/ghost against stale RAM.
+  clearToWhite();
+  updatesSinceFullRefresh = 0;
 }
 
 void Display::showTime(time_t utc, bool lowBattery) {
@@ -247,16 +291,29 @@ void Display::showTime(time_t utc, bool lowBattery) {
   }
   copyCanvasToBuffer();
 
-  startPartialUpdate(epdBuffer);
-  if (!waitWhileBusy()) {
-    Serial.println("eInk: BUSY timeout");
+  // Every EPD_FULL_REFRESH_EVERY-th update first clears the panel to white
+  // with a full refresh, to clear the ghosting left by partial ones. The
+  // time is then drawn with a partial refresh either way, as after boot.
+  bool full = ++updatesSinceFullRefresh >= EPD_FULL_REFRESH_EVERY;
+  bool cleared = true;
+  if (full) {
+    updatesSinceFullRefresh = 0;
+    cleared = clearToWhite();
+  }
+
+  // Skipped if the full refresh timed out: the panel may still be busy.
+  if (cleared) {
+    startPartialUpdate(epdBuffer);
+    if (!waitWhileBusy(PARTIAL_BUSY_TIMEOUT_MS)) {
+      Serial.println("eInk: BUSY timeout");
+    }
   }
 
   // Deep sleep mode 1 (0x10 = 0x01) retains both RAM planes, so after an
   // ESP32 deep-sleep wake the next partial refresh still has the previous
   // image to work against, and no full refresh is needed.
   EPD_DeepSleep();
-  Serial.printf("Display: %s %s\n", text, local.tm_isdst > 0 ? "(DST)" : "");
+  Serial.printf("Display: %s %s%s\n", text, local.tm_isdst > 0 ? "(DST)" : "", full ? " (full refresh)" : "");
 
   Sleep::release();
 }
@@ -274,9 +331,7 @@ void Display::showFrontLight() {
   // Alarm::readSetTime(hour, minute);
   // Serial.printf("Alarm set to %02d:%02d\n", hour, minute);
 
-  Serial.printf("Battery is %04d mV\n", Battery::readMillivolts());
-
-  // I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
+  I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON, "light on");
 
   Sleep::release();
 }

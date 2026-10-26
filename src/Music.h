@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Utils.h"
+
 // Alarm music: plays MUSIC_FILE from the LittleFS partition through the
 // MAX98357 I2S amplifier (I2S_BLCK, I2S_LRC, I2S_DIN). The amplifier is in
 // shutdown except during playback (I2S_ENABLE, see Music.cpp).
@@ -27,5 +29,12 @@ void stop();
 // True from play() until playback has ended, by reaching the end of the file
 // or by a stop() taking effect (within about 10 ms).
 bool isPlaying();
+
+// Asks for bits to be set in Utils::mainEventGroup every time playback ends,
+// however it ends (end of file, stop(), or failure to start), once
+// isPlaying() has gone false. Lets a caller wait for the end instead of
+// polling isPlaying(). Call after init(); bits from repeated calls
+// accumulate, so more than one module can ask.
+void signalWhenFinished(EventBits_t bits);
 
 }  // namespace Music

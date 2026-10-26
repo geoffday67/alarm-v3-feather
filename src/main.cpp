@@ -2,6 +2,7 @@
 #include <LittleFS.h>
 
 #include "Alarm.h"
+#include "AlarmSequence.h"
 #include "Battery.h"
 #include "Button.h"
 #include "Clock.h"
@@ -199,11 +200,14 @@ void setup() {
     powerOnInit();
   }
 
-  // Every boot: set up each module's tasks and interrupts. Music first: the
-  // clock and button tasks may call it as soon as their interrupts are
-  // attached (e.g. the press that woke us).
+  // Every boot: set up each module's tasks and interrupts. Music and the
+  // alarm sequence first: the clock and button tasks may call them as soon
+  // as their interrupts are attached (e.g. the press that woke us).
   Music::init();
   Serial.println("Music initialised");
+
+  AlarmSequence::init();
+  Serial.println("Alarm sequence initialised");
 
   Clock::init();
   Serial.println("Clock initialised");

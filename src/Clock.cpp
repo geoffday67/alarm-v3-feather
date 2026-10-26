@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "Alarm.h"
+#include "AlarmSequence.h"
 #include "Battery.h"
 #include "Constants.h"
 #include "Display.h"
@@ -26,7 +27,7 @@ EventBits_t bit;
 //   false - the countdown timer: every TEST_TICK_PERIOD_S, free-running and
 //           not aligned to the minute. For testing.
 constexpr bool TICK_ON_THE_MINUTE = true;
-constexpr uint8_t TEST_TICK_PERIOD_S = 5;
+constexpr uint8_t TEST_TICK_PERIOD_S = 10;
 
 // NTP is done with a single UDP exchange rather than the IDF/lwIP SNTP client
 // (configTime()), which in the IDF defaults waits a random 0-5 s before its
@@ -277,13 +278,14 @@ void clockTask(void* pparams) {
     // recorded as the last wake.
     if (utcValid && Alarm::isDue(utc)) {
       Serial.println("Alarm due");
-      // TODO: sound the alarm.
+      AlarmSequence::start();
     }
 
     // Battery voltage is checked on the same tick as the time.
     bool lowBattery = Battery::isLow();
 
-    // Blocks this task until the panel has finished (~0.3 s). Display holds
+    // Blocks this task until the panel has finished (~0.6 s, or ~5 s with
+    // the periodic full refresh). Display holds
     // its own sleep inhibit, so this would be safe even outside the one
     // taken in clockHandler(). A tick arriving meanwhile is handled on the
     // next loop.
