@@ -78,3 +78,14 @@ bool max17048ReadMillivolts(uint16_t& millivolts) {
   millivolts = (uint16_t)(((uint32_t)raw * 5 + 32) / 64);
   return true;
 }
+
+bool max17048ReadPercent(uint8_t& percent) {
+  uint16_t raw;
+  if (!max17048ReadReg(MAX17048_REG_SOC, raw)) {
+    return false;
+  }
+  // 1/256 % per LSB: the upper byte is whole percent, rounded with the lower.
+  uint16_t rounded = (uint16_t)(((uint32_t)raw + 128) >> 8);
+  percent = (uint8_t)(rounded > 100 ? 100 : rounded);
+  return true;
+}

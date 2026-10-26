@@ -33,11 +33,15 @@ void powerOnInit();
 // wake mask, as for the other modules' prepareForSleep()).
 uint64_t prepareForSleep();
 
-// Converts utc to local time (using the TZ set in setup()), renders it as
-// "HH:MM:SS", plus a low-battery message below it if lowBattery is set,
-// and refreshes the panel, then puts the panel into its own deep sleep.
-// Holds a Sleep inhibit for the duration, so the chip can't go into deep
-// sleep mid-update.
+// Converts utc to local time (using the TZ set in setup()) and renders it
+// as a 12-hour time, "H:MM" or "HH:MM" (no seconds), large on the left
+// with the colon and minutes in a fixed place, "AM"/"PM" to its right on its
+// baseline, and a phone-style battery indicator at the top left showing
+// batteryPercent (0-100; negative for unknown, drawn as an empty outline
+// with no number).
+// Then refreshes the panel and puts the panel into its own deep sleep. Holds
+// a Sleep inhibit for the duration, so the chip can't go into deep sleep
+// mid-update.
 //
 // Always drawn with a fast partial refresh (~0.6 s), which relies on the RAM
 // contents left by powerOnInit() or the previous update; these survive the
@@ -47,7 +51,7 @@ uint64_t prepareForSleep();
 // refresh (~4.3 s), to clear ghosting; the count is kept in RTC memory
 // across deep sleep. Blocks the caller until the panel
 // finishes, but polls BUSY with vTaskDelay(), so other tasks keep running.
-void showTime(time_t utc, bool lowBattery);
+void showTime(time_t utc, int batteryPercent);
 
 // Turns the eInk front light on. The PIC turns it off itself after its own
 // on-time, so this returns as soon as the command is sent.

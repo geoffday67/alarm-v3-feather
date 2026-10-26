@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <initializer_list>
+
 #include "Constants.h"
 
 namespace {
@@ -105,6 +107,13 @@ bool Alarm::isDue(time_t utc) {
     return false;
   }
 
-  time_t alarm = latestOccurrence(utc, hour, minute);
-  return last < alarm && alarm <= utc;
+  // The dial hour is 0-11: due at both the morning and the afternoon or
+  // evening time with the same minute.
+  for (int h : {(int)hour, hour + 12}) {
+    time_t alarm = latestOccurrence(utc, h, minute);
+    if (last < alarm && alarm <= utc) {
+      return true;
+    }
+  }
+  return false;
 }

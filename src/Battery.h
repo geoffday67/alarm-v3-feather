@@ -2,17 +2,17 @@
 
 #include <stdint.h>
 
-// LiPo low-battery detection from the cell voltage, measured by the
-// Feather's MAX17048 fuel gauge. Only the gauge's voltage reading is used;
-// its state-of-charge model is ignored. The only interface to the gauge:
-// nothing outside Battery.cpp uses battery/max17048.h directly.
+// LiPo state of charge, from the Feather's MAX17048
+// fuel gauge (its ModelGauge state-of-charge estimate, with the cell voltage
+// alongside for logging). The only interface to the gauge: nothing outside
+// Battery.cpp uses battery/max17048.h directly.
 //
 // Uses the shared I2C bus and takes the bus lock itself, so don't call
 // anything here while holding an I2CBus::Guard.
 namespace Battery {
 
-// At or below this cell voltage the battery is reported as low.
-constexpr int LOW_MILLIVOLTS = 3200;
+// readPercent()'s value when the gauge couldn't be read.
+constexpr int UNKNOWN_PERCENT = -1;
 
 // readMillivolts()'s value when the gauge couldn't be read.
 constexpr int UNKNOWN_MILLIVOLTS = -1;
@@ -45,8 +45,13 @@ uint64_t prepareForSleep();
 // Register). Logs only on failure.
 int readMillivolts();
 
-// True if the cell voltage is at or below LOW_MILLIVOLTS. False if it's
-// above, or if the gauge can't be read (logged). Logs the voltage. With no
-// cell connected (USB power only) the reading is meaningless.
-bool isLow();
+// Reads the gauge and returns the state of charge, 0-100 %, or
+// UNKNOWN_PERCENT if it can't be read (logged). Logs the state of charge and
+// voltage. The gauge's ModelGauge
+// estimate from its built-in generic LiPo model, updated every 45 s (forced
+// hibernate). Just after the cell is connected the estimate comes from the
+// voltage at that moment, so it can be off if the cell was under load or
+// charging; the gauge corrects it over time (datasheet: "ModelGauge heals
+// error automatically").
+int readPercent();
 }  // namespace Battery

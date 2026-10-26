@@ -5,7 +5,6 @@
 #include "AlarmSequence.h"
 #include "Constants.h"
 #include "Display.h"
-#include "Music.h"
 #include "Sleep.h"
 #include "Utils.h"
 #include "driver/rtc_io.h"
@@ -27,11 +26,6 @@ void topSwitchTask(void* pparams) {
     if (!AlarmSequence::handlePress()) {
       Display::showFrontLight();
     }
-    // if (Music::isPlaying()) {
-    //   Music::stop();
-    // } else {
-    //   Music::play();
-    // }
 
     // Release debounce. The interrupt has been disabled since the ISR ran, so
     // none of the press bounce gets through. The button counts as released

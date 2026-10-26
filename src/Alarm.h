@@ -26,8 +26,10 @@ bool readSetTime(uint8_t& hour, uint8_t& minute);
 // Call once per RTC tick with the current (valid) UTC, from one place only:
 // it records utc as the last wake time, kept in RTC memory across deep
 // sleep. Returns true if the dial time, taken as local time (TZ), fell in
-// (last wake, utc] - i.e. it passed since the previous call. Uses the most
-// recent occurrence of the dial time as an absolute instant, so it works
+// (last wake, utc] - i.e. it passed since the previous call. The dial hour
+// is 0-11, so the alarm goes off twice a day: at the dial time and 12 hours
+// later (dials at 8:05 -> 08:05 and 20:05; 0:05 -> 00:05 and 12:05). Uses
+// the most recent occurrence of each as an absolute instant, so it works
 // across midnight. Returns false without recording utc if the dials can't be
 // read, so the next call still covers the missed interval. Always false on
 // the first call after a cold boot (no last wake time yet) and when the

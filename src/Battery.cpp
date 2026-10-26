@@ -34,20 +34,21 @@ uint64_t Battery::prepareForSleep() {
 
 int Battery::readMillivolts() {
   uint16_t millivolts;
-  if (!max17048ReadMillivolts(millivolts)) {
+  if (!max17048ReadMillivolts(millivolts)){ 
     Serial.println("Battery: gauge voltage read failed");
     return UNKNOWN_MILLIVOLTS;
   }
   return millivolts;
 }
 
-bool Battery::isLow() {
-  int millivolts = readMillivolts();
-  if (millivolts == UNKNOWN_MILLIVOLTS) {
-    return false;
+int Battery::readPercent() {
+  uint8_t percent;
+  if (!max17048ReadPercent(percent)) {
+    Serial.println("Battery: gauge state-of-charge read failed");
+    return UNKNOWN_PERCENT;
   }
-
-  bool low = millivolts <= LOW_MILLIVOLTS;
-  Serial.printf("Battery: %d mV%s\n", millivolts, low ? " (LOW)" : "");
-  return low;
+  // Voltage for the log only (UNKNOWN_MILLIVOLTS if that read fails).
+  Serial.printf("Battery: %u%% (%d mV)\n", percent, readMillivolts());
+  return percent;
 }
+

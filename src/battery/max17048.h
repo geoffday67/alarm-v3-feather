@@ -83,9 +83,18 @@ bool max17048ForceHibernate();
 // Characteristics; the register description says "approximately 0.5uA").
 // Removal/reinsertion is still detected by the ADC, just more slowly: the IC
 // resets 250 ms after VCELL rises back above VRESET rather than 1 ms. Only
-// matters for the SOC estimate, which isn't used. Read-modify-write, so the
-// VRESET threshold is unchanged.
+// matters for a quick cell swap (the gauge re-estimates SOC from the new
+// cell after the reset); removing the cell for longer powers the gauge down
+// anyway, since it runs from the cell. Read-modify-write, so the VRESET
+// threshold is unchanged.
 bool max17048DisableResetComparator();
 
 // Cell voltage in mV (VCELL * 78.125 uV, rounded).
 bool max17048ReadMillivolts(uint16_t& millivolts);
+
+// State of charge in whole percent: SOC (1/256 % per LSB) rounded to the
+// nearest percent and clamped to 100, as the ModelGauge estimate can read
+// slightly over 100% (e.g. while charging). From the gauge's built-in
+// generic LiPo model, not a custom model for this cell. Updated every 45 s
+// in hibernate.
+bool max17048ReadPercent(uint8_t& percent);

@@ -281,15 +281,15 @@ void clockTask(void* pparams) {
       AlarmSequence::start();
     }
 
-    // Battery voltage is checked on the same tick as the time.
-    bool lowBattery = Battery::isLow();
+    // Battery state of charge is read on the same tick as the time.
+    int batteryPercent = Battery::readPercent();
 
     // Blocks this task until the panel has finished (~0.6 s, or ~5 s with
     // the periodic full refresh). Display holds
     // its own sleep inhibit, so this would be safe even outside the one
     // taken in clockHandler(). A tick arriving meanwhile is handled on the
     // next loop.
-    Display::showTime(utc, lowBattery);
+    Display::showTime(utc, batteryPercent);
     TimeSync::logLastSync();
 
     // Daily NTP sync (retried on the next few ticks after a failure). After the display
@@ -300,7 +300,7 @@ void clockTask(void* pparams) {
       // The time just shown couldn't be trusted; show the corrected one now
       // rather than at the next tick.
       if (Clock::readUtc(utc)) {
-        Display::showTime(utc, lowBattery);
+        Display::showTime(utc, batteryPercent);
         TimeSync::logLastSync();
       }
     }
