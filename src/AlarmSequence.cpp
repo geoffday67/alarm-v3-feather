@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "Display.h"
 #include "Moomin.h"
 #include "Music.h"
 #include "PDLC.h"
@@ -42,8 +43,9 @@ class Locked {
 
 // Any stage -> Idle. Call with the lock held.
 void finish(const char* reason) {
-  Serial.printf("Alarm: %s, film off\n", reason);
+  Serial.printf("Alarm: %s, film and light off\n", reason);
   PDLC::off();
+  Display::frontLightOff();
   currentStage = Stage::Idle;
   Serial.println("Alarm: finished");
   Sleep::release();
@@ -116,6 +118,7 @@ void AlarmSequence::start() {
   Music::play();
   Moomin::pulse();
   PDLC::on();
+  Display::holdFrontLightOn();
   currentStage = Stage::Ringing;
 
   xEventGroupSetBits(Utils::mainEventGroup, stageChangedBit);

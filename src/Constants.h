@@ -19,12 +19,15 @@
 
 // Must match the PIC. EINK_LIGHT_ON fades the front light on and the PIC turns
 // it off itself after its own on-time (EINK_LIGHT_ON_TIME_MS in the PIC's
-// main.c; a repeat ON restarts it); EINK_LIGHT_OFF turns it off early.
+// main.c; a repeat ON restarts it). EINK_LIGHT_ON_HOLD fades it on with no
+// time limit (cancelling any on-time already running), until
+// EINK_LIGHT_OFF. EINK_LIGHT_OFF fades it off, however it was turned on.
 #define I2C_COMMAND_EINK_LIGHT_ON 0x01
 #define I2C_COMMAND_EINK_LIGHT_OFF 0x02
 #define I2C_COMMAND_PDLC_ON 0x03
 #define I2C_COMMAND_PDLC_OFF 0x04
 #define I2C_COMMAND_PULSE_MOOMIN 0x05
+#define I2C_COMMAND_EINK_LIGHT_ON_HOLD 0x06
 
 // Wiring between the Feather ESP32C6 and the DESPI-C02 adapter board carrying
 // the GDEY029T94-FL03 (SSD1680) e-paper panel.

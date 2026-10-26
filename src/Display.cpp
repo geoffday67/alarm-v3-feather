@@ -335,3 +335,17 @@ void Display::showFrontLight() {
 
   Sleep::release();
 }
+
+void Display::holdFrontLightOn() {
+  // The PIC holds the light on through its own sleep, so the chip can deep
+  // sleep with it on. The Sleep inhibit only covers the I2C transaction.
+  Sleep::inhibit();
+  I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_ON_HOLD, "light on (hold)");
+  Sleep::release();
+}
+
+void Display::frontLightOff() {
+  Sleep::inhibit();
+  I2CBus::sendPicCommand(I2C_COMMAND_EINK_LIGHT_OFF, "light off");
+  Sleep::release();
+}

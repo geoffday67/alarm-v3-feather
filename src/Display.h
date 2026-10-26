@@ -52,4 +52,12 @@ void showTime(time_t utc, bool lowBattery);
 // Turns the eInk front light on. The PIC turns it off itself after its own
 // on-time, so this returns as soon as the command is sent.
 void showFrontLight();
+
+// Turns the eInk front light on with no time limit, cancelling the PIC's
+// on-time if a showFrontLight() is still running. Stays on, including while
+// this chip deep sleeps, until frontLightOff().
+void holdFrontLightOn();
+
+// Turns the eInk front light off, however it was turned on.
+void frontLightOff();
 }  // namespace Display
